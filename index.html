@@ -115,6 +115,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
       <div><label>Server platform</label><select id="platform" onchange="syncPlatform();calc()">
         <option value="b300" selected>Cisco UCS C880A M8 / B300 — choose B301–B308 below</option>
         <option value="supermicro-b300">Supermicro HGX B300 (SKU by cooling)</option>
+        <option value="amd-mi355x">AMD Instinct MI355X — 8-GPU server / 400G RoCE profile</option>
         <option value="gb300-nvl72">Supermicro GB300 NVL72 Rack — reference offering</option>
         <option value="rubin-nvl72">Supermicro Vera Rubin NVL72 Rack — reference offering</option>
         <option value="rubin-hgx">Supermicro HGX Rubin NVL8 Rack / Server — reference offering</option>
@@ -222,7 +223,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
       </select></div>
       <div><label>Backend target</label><select id="backendTarget" onchange="calc()"><option value="1" selected>1:1 non-blocking (no oversubscription)</option></select></div>
     <div class="footer-note">Cisco Secure AI Factory CVD guidance uses a 4-node scale unit (32 GPUs on 8-GPU systems) as a common starting point. Larger SU sizes in this tool are engineering planning groups unless separately validated.</div>
-    <div class="footer-note"><b>Recommended default:</b> Rail-Optimized + Dual Plane for B300/CX8 reference designs. Both remain user-selectable because customer/server NIC topology and validated CVD/RA requirements can differ.</div>
+    <div class="footer-note"><b>Recommended default:</b> Rail-Optimized + Dual Plane for B300/CX8 reference designs. Both remain user-selectable because customer/server NIC topology and validated CVD/RA requirements can differ. <b>AMD MI355X:</b> uses the same server-based sizing framework but defaults to <b>N9364E-SG2X-O (Silicon One)</b> with an 8×400G/server RoCE planning profile; no Spectrum-X dependency.</div>
     <div class="footer-note"><b>Backend optic choice:</b> DR8 is the long-reach SMF option (500 m). VR8 is the short-reach MMF option (50 m on OM4/OM5) and supports the same 1×800G / 2×400G / 4×200G switch-side breakout model. <b>ConnectX-7 preset:</b> Cisco host side is standardized on <b>QDD-400G-SR8= / MMF</b>. <b>ConnectX-8:</b> NVIDIA validation references base module P/Ns OSFPR-800G-DR8 / OSFP-800G-VR8; BOM and CCW export use Cisco spare-ordering PIDs <b>OSFPR-800G-DR8=</b> / <b>OSFP-800G-VR8=</b>. <b>Rubin NVL8:</b> ConnectX-9 uses NVIDIA <b>MMS4X00-NM-HGX</b>, an 800G twin-port OSFP configured as 2×400G over SMF/2×DR4; the app locks the switch-side family to DR8 pending final interoperability validation.</div>
   </div>
 
@@ -434,6 +435,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
   QDD-400G-DR4-S= on N9K-C9332D-GX2B / N9K-C9364D-GX2A;
   QSFP-200G-SR4-S= on N9K-C9332D-GX2B;
   QSFP-40G-SR4-S= on N9K-C93108TC-FX3 / N9K-C9332C for OOB leaf-spine links.
+  <b>AMD MI355X:</b> v68 adds an 8-GPU MI355X server profile. The backend defaults to Cisco N9364E-SG2X-O Silicon One with 1×400G RoCE/GPU (8×400G/server) as the planning baseline; exact OEM NIC/optic/server physical data remains validation-required.<br>
   <b>GB300 OOB guardrail:</b> v67 enforces a dedicated spine-leaf OOB design whenever the deployment exceeds 2 NVL72 racks. Direct handoff and simple STP remain available only for 1–2 racks; if an SE selects either at >2 racks, the effective topology is automatically forced to spine-leaf and the UI/QA explains the override.<br>
   <b>GB300 OOB SE override:</b> v66 adds an explicit GB300 OOB design selector. The SE can choose Auto, direct customer-core handoff, simple N93108TC-FX3 Layer-2/STP aggregation, or an N9332C spine-leaf OOB design. BOM, topology, facilities, KPI and validation follow the selected mode.<br>
   <b>GB300 OOB simplification:</b> v65 removes mandatory N9336C-SE1 aggregation at 1–2 racks. Small deployments use the two in-rack N93108TC-FX3 switches per NVL72 and hand off directly to the customer OOB/management core. From 3 racks upward the app adds only a simple redundant N9336C-SE1 aggregation pair, not a separate spine-leaf OOB fabric.<br>
@@ -654,6 +656,7 @@ const PHYSICAL={
     "supermicro-b300-air":{name:"Supermicro SYS-822GS-NB3RT1/2 / HGX B300",ru:8,powerMaxW:15000,powerTypicalW:null,weightNetLb:263,weightGrossLb:302,cooling:"Air",maxNodesPerRackRef:4,heatCapturePct:0,cduKw:0,source:"Supermicro datasheet; 15 kW planning load"},
     "supermicro-b300-lcc":{name:"Supermicro SYS422GSNB3RTLCC1/2 / HGX B300",ru:4,powerMaxW:15000,powerTypicalW:null,weightNetLb:186.5,weightGrossLb:222,cooling:"Direct Liquid (LCC)",maxNodesPerRackRef:8,heatCapturePct:null,cduKw:250,source:"Supermicro datasheet; 15 kW planning load"},
     "supermicro-b300-alc":{name:"Supermicro SYS-422GS-NB3RT-ALC / HGX B300",ru:4,powerMaxW:15000,powerTypicalW:null,weightNetLb:222,weightGrossLb:258,cooling:"DLC-2 (ALC)",maxNodesPerRackRef:8,heatCapturePct:95,cduKw:250,source:"Supermicro datasheet; 15 kW planning load"},
+    "amd-mi355x":{name:"AMD Instinct MI355X 8-GPU Server",ru:8,powerMaxW:0,powerTypicalW:null,weightNetLb:0,weightGrossLb:null,cooling:"Platform dependent",source:"Planning profile only. Select the exact OEM MI355X server before facility power/weight sign-off."},
     "gb300-nvl72":{name:"Supermicro GB300 NVL72 48U Rack",ru:48,powerMaxW:142000,powerTypicalW:140000,weightNetLb:0,weightGrossLb:null,cooling:"Direct Liquid",fixedRack:true,source:"Power planning: 140 kW nominal / 142 kW max; physical rack-scale system. Installed weight TBD pending exact Supermicro rack specification"},
     "rubin-nvl72":{name:"Supermicro Vera Rubin NVL72 48U Rack",ru:48,powerMaxW:0,powerTypicalW:null,weightNetLb:0,weightGrossLb:null,cooling:"Direct Liquid",fixedRack:true,source:"48U rack-scale offering; power and installed weight TBD pending exact Supermicro Vera Rubin rack specification"},
     "rubin-hgx":{name:"Supermicro HGX Rubin NVL8",ru:2,powerMaxW:24000,powerTypicalW:null,weightNetLb:154,weightGrossLb:null,cooling:"Liquid",source:"24 kW: NVIDIA DGX Rubin NVL8 preliminary spec; 154 lb: temporary proxy from Supermicro 2U liquid-cooled HGX family — override with exact SYS222GS Rubin data when published"},
@@ -835,7 +838,7 @@ function syncRubinProfile(){
   }
 }
 function syncPlatform(){
-  const p=$('platform').value,isB=p==='b300'||p==='supermicro-b300',isCustom=p==='custom';
+  const p=$('platform').value,isB=p==='b300'||p==='supermicro-b300',isCustom=p==='custom',isAmdMi355x=p==='amd-mi355x';
   $('b300mode').disabled=!isB;
   if(!isB)$('b300mode').value='single800';
   $('coolingType').disabled=p!=='supermicro-b300';
@@ -863,6 +866,12 @@ function syncPlatform(){
     if($('suMode') && $('suMode').value==='cvd4')$('suMode').value='off';
   }else{
     if($('backendTopology'))$('backendTopology').disabled=false;
+  }
+  if(isAmdMi355x){
+    if($('backendTopology'))$('backendTopology').value='rail';
+    if($('backendSwitch'))$('backendSwitch').value='N9364E-SG2X-O';
+    if($('backendOptic'))$('backendOptic').value='OSFP-800G-DR8';
+    if($('suMode') && $('suMode').value==='off')$('suMode').value='cvd4';
   }
 
   const ccwBlock=$('ccwComputeBlock'), atoSel=$('ccwComputeAto'), mlb=$('ccwComputeMlb'), note=$('ccwComputeNote');
@@ -1886,7 +1895,7 @@ function calc(){
   const oobEnabled=featureOn('oobToggle');
   const mgmtEnabled=featureOn('mgmtToggle');
 
-  const platform=$('platform').value,isB300=(platform==='b300'||platform==='supermicro-b300'),isCustom=platform==='custom';
+  const platform=$('platform').value,isB300=(platform==='b300'||platform==='supermicro-b300'),isCustom=platform==='custom',isAmdMi355x=platform==='amd-mi355x';
   const sizingBasis=$('sizingBasis')?.value||'nodes';
   const computePowerBudgetKw=Math.max(1,+$('computePowerBudgetKw')?.value||1000);
   const computePowerBasis=$('computePowerBasis')?.value||'max';
@@ -1921,7 +1930,16 @@ function calc(){
   const customNicPortMode=isCustom?($('customNicPortMode').value||'sp_dp'):null;
   const customNicSpeed=isCustom?(customNicProfile==='cx7'?400:customNicProfile==='cx8'?800:Math.max(100,+$('customNicSpeed').value||400)):null;
   let customBackendProfile=null;
-  if(isRubinNvl8){
+  if(isAmdMi355x){
+    customBackendProfile={
+      nicProfile:'amd-mi355x',
+      portMode:'sp_sp',
+      hostInterfaceSpeed:400,
+      linkSpeed:400,
+      linksPerGpu:1,
+      physicalPortsPerGpu:1
+    };
+  }else if(isRubinNvl8){
     const rubinMode=$('rubinNicMode')?.value||'sp_dp';
     const dualPlane=rubinMode==='sp_dp';
     customBackendProfile={
@@ -1947,9 +1965,16 @@ function calc(){
     }
   }
   const gpuModel=isCustom?($('customGpuModel').value.trim()||'Custom GPU'):
-    (isB300?'NVIDIA B300':platform==='gb300-nvl72'?'NVIDIA GB300':platform==='rubin-nvl72'||platform==='rubin-hgx'?'NVIDIA Vera Rubin':platform==='h200'?'NVIDIA H200':'GPU');
-  const mode=isB300?$('b300mode').value:((isCustom||isRubinNvl8)?'custom':'single800'),top=$('backendTopology').value,pid=$('backendSwitch').value;
-  if(isRubinNvl8 && $('backendOptic')){
+    (isB300?'NVIDIA B300':isAmdMi355x?'AMD Instinct MI355X':platform==='gb300-nvl72'?'NVIDIA GB300':platform==='rubin-nvl72'||platform==='rubin-hgx'?'NVIDIA Vera Rubin':platform==='h200'?'NVIDIA H200':'GPU');
+  const mode=isB300?$('b300mode').value:((isCustom||isRubinNvl8||isAmdMi355x)?'custom':'single800'),top=$('backendTopology').value,pid=$('backendSwitch').value;
+  if(isAmdMi355x){
+    if($('backendSwitch')){
+      $('backendSwitch').value='N9364E-SG2X-O';
+      $('backendSwitch').disabled=true;
+      $('backendSwitch').title='AMD MI355X default: Cisco N9364E-SG2X-O Silicon One backend. Spectrum-X is not required.';
+    }
+    if($('backendOptic'))$('backendOptic').disabled=false;
+  }else if(isRubinNvl8 && $('backendOptic')){
     $('backendOptic').value='OSFP-800G-DR8';
     $('backendOptic').disabled=true;
   }else if(isCustom && customNicProfile==='cx7' && $('backendOptic')){
@@ -1957,6 +1982,10 @@ function calc(){
     $('backendOptic').disabled=true;
   }else if($('backendOptic')){
     $('backendOptic').disabled=false;
+  }
+  if(!isAmdMi355x && $('backendSwitch')){
+    $('backendSwitch').disabled=false;
+    $('backendSwitch').title='';
   }
   const backendOpticBase=$('backendOptic')?.value||'OSFP-800G-DR8';
   const backendOpticPid=`${backendOpticBase}=`;
@@ -2328,12 +2357,16 @@ function calc(){
     add('AI Backend Superspine',pid,'AI fabric superspine switch',be.totalSuperspines,`${be.superspinesPerPlane}/plane × ${be.planes} plane(s) · ${be.ssCoresPerPlane} cores/plane · ${be.ssPerCore} superspines/core`,'Cisco B300/CX8 large-scale RA sample');
   }
   if(isCustom || isRubinNvl8){
-    const nicLabel=be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':'Custom NIC';
+    const nicLabel=be.nicProfile==='amd-mi355x'?'AMD MI355X 400G RoCE':be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':'Custom NIC';
     let customHostPid,customHostDesc,customHostStatus;
     if(be.nicProfile==='cx9-rubin'){
       customHostPid='MMS4X00-NM-HGX';
       customHostDesc='NVIDIA 800G twin-port OSFP host optic · 2×400G · SMF · dual DR4 · 500 m';
       customHostStatus='Published NVIDIA Rubin NVL8 host optic; validate exact Supermicro SYS-222GS implementation and Cisco switch-side interoperability';
+    }else if(be.nicProfile==='amd-mi355x'){
+      customHostPid='TBD-400G-AMD-ROCE-HOST';
+      customHostDesc='400G RoCE host-side optic / cable assembly for MI355X server NIC';
+      customHostStatus='Validate exact OEM NIC (AMD Pensando / Broadcom / other qualified 400G RoCE adapter), optic and cable assembly';
     }else if(be.nicProfile==='cx7'){
       if(be.portMode==='dp_dp'){
         customHostPid='QSFP-200G-SR4-S=';
@@ -2590,6 +2623,10 @@ function calc(){
   if(isCustom)q.push(`<b class="good">CUSTOM</b> ${nodes} servers × ${customGpusPerNode} ${gpuModel}/server = ${be.gpus} GPUs; backend requirement ${be.backendLabel} (${be.physicalHostLinks} host links total).`);
   if(vastEnabled)q.push(`<b class="good">CCW ACTION</b> VAST hierarchy: add VAST-DATA-MLB → confirm ${eq} × UCSC-C225M8N-EBOX and VAST Nexus hardware children → select VAST-DATA-SPLUS → configure ${vastCapacityLicenses} × VAST-SW-1TB, ${vastCoreLicenses} × VAST-SW-1CPU-CORE, VAST-PS-COPILOT, and ${vastInstallServiceQty} × VAST-PS.`);
 
+  if(isAmdMi355x){
+    q.push(`<b class="good">AMD MI355X PROFILE</b> ${nodes} servers × 8 GPUs = ${be.gpus} MI355X GPUs. Backend planning uses 1×400G RoCE link/GPU (8×400G/server) on Cisco <b>N9364E-SG2X-O Silicon One</b>. Spectrum-X is not required. Exact OEM NIC, host optic/cable and server physical specifications remain validation items.`);
+    q.push(`<b class="${pid==='N9364E-SG2X-O'?'good':'bad'}">${pid==='N9364E-SG2X-O'?'PASS':'FAIL'}</b> AMD backend default switch: ${pid}. Expected N9364E-SG2X-O.`);
+  }
   if(platform==='b300')q.push(`<b class="good">PASS</b> C880A CCW ordering: ${computeMlb} → ${computeAto} × ${nodes}; current Cisco guide lists B301–B308 and requires power-cable selection in the configurator.`);
   if(platform==='h200')q.push(`<b class="warn">CHECK</b> C885A CCW ordering: current guide workflow references ${computeAto} under ${computeMlb}, but its current public PID table emphasizes MI350X configurations. Validate H11/H200 availability and exact fixed configuration in CCW before booking.`);
 
