@@ -4,7 +4,7 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
 
 ## Canonical application
 - `main/index.html`
-- Current baseline: v67
+- Current baseline: v68
 
 ## Current design decisions
 - NVIDIA GB300 NVL72 OOB:
