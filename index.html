@@ -115,7 +115,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
       <div><label>Server platform</label><select id="platform" onchange="syncPlatform();calc()">
         <option value="b300" selected>Cisco UCS C880A M8 / B300 — choose B301–B308 below</option>
         <option value="supermicro-b300">Supermicro HGX B300 (SKU by cooling)</option>
-        <option value="amd-mi355x">AMD Instinct MI355X — 8-GPU server / 400G RoCE profile</option>
+        <option value="amd-mi355x">AMD Instinct MI355X — 8-GPU server / configurable RoCE NIC profile</option>
         <option value="gb300-nvl72">Supermicro GB300 NVL72 Rack — reference offering</option>
         <option value="rubin-nvl72">Supermicro Vera Rubin NVL72 Rack — reference offering</option>
         <option value="rubin-hgx">Supermicro HGX Rubin NVL8 Rack / Server — reference offering</option>
@@ -173,6 +173,21 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
         </div>
         <div class="footer-note">NIC mode separates <b>physical host cages</b> from <b>logical network links</b>. <b>Single Port / Single Plane:</b> one active link on one plane. <b>Single Port / Dual Plane:</b> one physical host cage is split across two planes (CX-7: 2×200G; CX-8 C8180-style: 2×400G). <b>Dual Port / Dual Plane:</b> two physical NIC ports are used, one per plane (CX-7 dual-port profile: 2×200G; CX-8 C8240-style: 2×400G). The dual-plane switch bandwidth is the same for single-cage split and dual-port modes; the host optic/cable count changes.</div>
       </div>
+      <div id="amdNicFields" class="custom-box" style="display:none">
+        <div class="grid2">
+          <div><label>RoCE NICs / server</label><input id="amdNicsPerServer" type="number" min="1" max="32" step="1" value="8" oninput="calc()"></div>
+          <div><label>Active link speed / NIC</label><select id="amdNicSpeed" onchange="calc()">
+            <option value="200">200G</option>
+            <option value="400" selected>400G</option>
+            <option value="800">800G</option>
+          </select></div>
+          <div><label>Backend fabric planes</label><select id="amdFabricPlanes" onchange="calc()">
+            <option value="1" selected>Single plane</option>
+            <option value="2">Dual plane — split NICs evenly</option>
+          </select></div>
+        </div>
+        <div class="footer-note"><b>AMD default:</b> 8 independent 400G RoCE NIC links per 8-GPU server (1:1 NIC-to-GPU planning mapping) on Cisco N9364E-SG2X-O Silicon One. Change the NIC count, link speed, or plane count to match the selected OEM server. Dual-plane designs should use an even NIC count so each plane receives the same number of links. Spectrum-X is not required.</div>
+      </div>
       <div><label>Sizing scenario</label><select id="sizingBasis" onchange="syncSizingBasis();calc()">
         <option value="nodes" selected>Node / rack count given</option>
         <option value="power">Compute power budget given</option>
@@ -223,7 +238,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
       </select></div>
       <div><label>Backend target</label><select id="backendTarget" onchange="calc()"><option value="1" selected>1:1 non-blocking (no oversubscription)</option></select></div>
     <div class="footer-note">Cisco Secure AI Factory CVD guidance uses a 4-node scale unit (32 GPUs on 8-GPU systems) as a common starting point. Larger SU sizes in this tool are engineering planning groups unless separately validated.</div>
-    <div class="footer-note"><b>Recommended default:</b> Rail-Optimized + Dual Plane for B300/CX8 reference designs. Both remain user-selectable because customer/server NIC topology and validated CVD/RA requirements can differ. <b>AMD MI355X:</b> uses the same server-based sizing framework but defaults to <b>N9364E-SG2X-O (Silicon One)</b> with an 8×400G/server RoCE planning profile; no Spectrum-X dependency.</div>
+    <div class="footer-note"><b>Recommended default:</b> Rail-Optimized + Dual Plane for B300/CX8 reference designs. Both remain user-selectable because customer/server NIC topology and validated CVD/RA requirements can differ. <b>AMD MI355X:</b> uses the same server-based sizing framework, defaults to <b>N9364E-SG2X-O (Silicon One)</b> and 8×400G/server, and exposes the actual NIC count, speed, and plane assumptions; no Spectrum-X dependency.</div>
     <div class="footer-note"><b>Backend optic choice:</b> DR8 is the long-reach SMF option (500 m). VR8 is the short-reach MMF option (50 m on OM4/OM5) and supports the same 1×800G / 2×400G / 4×200G switch-side breakout model. <b>ConnectX-7 preset:</b> Cisco host side is standardized on <b>QDD-400G-SR8= / MMF</b>. <b>ConnectX-8:</b> NVIDIA validation references base module P/Ns OSFPR-800G-DR8 / OSFP-800G-VR8; BOM and CCW export use Cisco spare-ordering PIDs <b>OSFPR-800G-DR8=</b> / <b>OSFP-800G-VR8=</b>. <b>Rubin NVL8:</b> ConnectX-9 uses NVIDIA <b>MMS4X00-NM-HGX</b>, an 800G twin-port OSFP configured as 2×400G over SMF/2×DR4; the app locks the switch-side family to DR8 pending final interoperability validation.</div>
   </div>
 
@@ -435,7 +450,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
   QDD-400G-DR4-S= on N9K-C9332D-GX2B / N9K-C9364D-GX2A;
   QSFP-200G-SR4-S= on N9K-C9332D-GX2B;
   QSFP-40G-SR4-S= on N9K-C93108TC-FX3 / N9K-C9332C for OOB leaf-spine links.
-  <b>AMD MI355X:</b> v68 adds an 8-GPU MI355X server profile. The backend defaults to Cisco N9364E-SG2X-O Silicon One with 1×400G RoCE/GPU (8×400G/server) as the planning baseline; exact OEM NIC/optic/server physical data remains validation-required.<br>
+  <b>AMD MI355X:</b> v69 models MI355X as an 8-GPU server on the shared server-sizing engine. The backend defaults to Cisco N9364E-SG2X-O Silicon One and 8×400G RoCE/server, while NIC count, active link speed and plane count are configurable; BOM, topology and validation follow those server-level assumptions. Spectrum-X is not required, and exact OEM NIC/optic/server physical data remains validation-required.<br>
   <b>GB300 OOB guardrail:</b> v67 enforces a dedicated spine-leaf OOB design whenever the deployment exceeds 2 NVL72 racks. Direct handoff and simple STP remain available only for 1–2 racks; if an SE selects either at >2 racks, the effective topology is automatically forced to spine-leaf and the UI/QA explains the override.<br>
   <b>GB300 OOB SE override:</b> v66 adds an explicit GB300 OOB design selector. The SE can choose Auto, direct customer-core handoff, simple N93108TC-FX3 Layer-2/STP aggregation, or an N9332C spine-leaf OOB design. BOM, topology, facilities, KPI and validation follow the selected mode.<br>
   <b>GB300 OOB simplification:</b> v65 removes mandatory N9336C-SE1 aggregation at 1–2 racks. Small deployments use the two in-rack N93108TC-FX3 switches per NVL72 and hand off directly to the customer OOB/management core. From 3 racks upward the app adds only a simple redundant N9336C-SE1 aggregation pair, not a separate spine-leaf OOB fabric.<br>
@@ -857,6 +872,7 @@ function syncPlatform(){
     $('oobFabricMode').title=p==='gb300-nvl72'?'Use the GB300 OOB SE override below':'';
   }
   if($('customGpuFields'))$('customGpuFields').style.display=isCustom?'':'none';
+  if($('amdNicFields'))$('amdNicFields').style.display=isAmdMi355x?'':'none';
   if((isCustom||p==='rubin-hgx') && $('suMode').value==='cvd4')$('suMode').value='custom';
   if(p==='gb300-nvl72'){
     if($('backendTopology')){$('backendTopology').value='rail';$('backendTopology').disabled=true;}
@@ -1200,14 +1216,25 @@ const TWO_TIER_LEAF_LIMIT_PER_PLANE = 128; // Cisco B300/CX8 RA: 2-tier scales t
 
 function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
   let speed,logicalPerGpu,planes,isCustom=!!customProfile,aggregatePerGpu,nicProfile=null,hostInterfaceSpeed=null,portMode=null,physicalPortsPerGpu=1;
+  let profileBasis='gpu',linksPerServer=null,physicalPortsPerServer=null;
   if(customProfile){
     nicProfile=customProfile.nicProfile||'custom';
     portMode=customProfile.portMode||'sp_sp';
+    profileBasis=customProfile.profileBasis==='server'?'server':'gpu';
     hostInterfaceSpeed=Math.max(100,+customProfile.hostInterfaceSpeed||400);
     speed=Math.max(100,+customProfile.linkSpeed||hostInterfaceSpeed);
-    logicalPerGpu=Math.max(1,+customProfile.linksPerGpu||1);
-    physicalPortsPerGpu=Math.max(1,+customProfile.physicalPortsPerGpu||1);
-    planes=portMode==='sp_sp'?1:2;
+    planes=Math.max(1,Math.min(2,+customProfile.planes||(portMode==='sp_sp'?1:2)));
+    if(profileBasis==='server'){
+      linksPerServer=Math.max(1,+customProfile.linksPerServer||1);
+      physicalPortsPerServer=Math.max(1,+customProfile.physicalPortsPerServer||linksPerServer);
+      logicalPerGpu=linksPerServer/gpusPerNode;
+      physicalPortsPerGpu=physicalPortsPerServer/gpusPerNode;
+    }else{
+      logicalPerGpu=Math.max(1,+customProfile.linksPerGpu||1);
+      physicalPortsPerGpu=Math.max(1,+customProfile.physicalPortsPerGpu||1);
+      linksPerServer=logicalPerGpu*gpusPerNode;
+      physicalPortsPerServer=physicalPortsPerGpu*gpusPerNode;
+    }
     aggregatePerGpu=speed*logicalPerGpu;
   }else{
     planes=mode==='dual400'?2:1;
@@ -1216,7 +1243,10 @@ function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
     aggregatePerGpu=speed*logicalPerGpu;
   }
 
-  const gpus=nodes*gpusPerNode,linksPerPlane=(gpus*logicalPerGpu)/planes;
+  const gpus=nodes*gpusPerNode,totalLogicalLinks=profileBasis==='server'?nodes*linksPerServer:gpus*logicalPerGpu;
+  // Symmetric leaf/spine blocks are sized to the busier plane when an odd server-link
+  // assumption is split across two planes. Validation flags the uneven input.
+  const linksPerPlane=Math.ceil(totalLogicalLinks/planes);
   const ciscoCx8DualRA=gpusPerNode===8 && speed===400 && logicalPerGpu===2 && planes===2 &&
     (!isCustom || nicProfile==='cx8');
 
@@ -1296,7 +1326,8 @@ function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
       if(!isCustom && gpusPerNode===8 && speed===800 && logicalPerGpu===1){
         leaves=Math.max(8,8*Math.ceil(nodes/32));
       }else{
-        const railsPerPlane=Math.max(1,Math.ceil(gpusPerNode*speed/800));
+        const logicalLinksPerServer=profileBasis==='server'?linksPerServer:gpusPerNode*logicalPerGpu;
+        const railsPerPlane=Math.max(1,Math.ceil((logicalLinksPerServer/planes)*speed/800));
         leaves=Math.max(railsPerPlane,railsPerPlane*Math.ceil(nodes/32));
       }
     }else{
@@ -1321,11 +1352,13 @@ function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
 
   // 800G-equivalent physical leaf-spine links.
   const linksPerPlanePhysical=up.reduce((a,b)=>a+b,0);
-  const physicalHostLinks=gpus*logicalPerGpu;
-  const hostOptics=isCustom?gpus*physicalPortsPerGpu:gpus;
+  const physicalHostLinks=totalLogicalLinks;
+  const hostOptics=isCustom?(profileBasis==='server'?nodes*physicalPortsPerServer:gpus*physicalPortsPerGpu):gpus;
   const portModeLabel=portMode==='sp_dp'?'single port / dual plane':portMode==='dp_dp'?'dual port / dual plane':'single port / single plane';
   const backendLabel=isCustom
-    ? `${logicalPerGpu}×${speed}G / GPU · ${portModeLabel}`
+    ? (profileBasis==='server'
+      ? `${linksPerServer}×${speed}G RoCE / server · ${planes}-plane fabric · ${(gpusPerNode/linksPerServer).toFixed(2).replace(/\.00$/,'')} GPU/NIC planning ratio`
+      : `${logicalPerGpu}×${speed}G / GPU · ${portModeLabel}`)
     : `${aggregatePerGpu}G aggregate / GPU · ${logicalPerGpu}×${speed}G${planes===2?' · dual plane':' · single plane'}`;
 
   const fabricTier=superspinesPerPlane>0?'3-tier':(exceedsTwoTier?'3-tier review':'2-tier');
@@ -1339,7 +1372,7 @@ function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
     logicalSpineSuperLinksPerPlane,logicalSpineSuperLinks,physicalSpineSuperLinks,spineSuperOptics,
     raScaleUnits,ssCoresPerPlane,ssPerCore,linksPerLeafSpinePair400,linksPerSpineSuperPair400,
     ciscoCx8DualRA,validatedScaleExceeded,
-    backendLabel,isCustom,nicProfile,portMode,hostInterfaceSpeed,physicalPortsPerGpu,atTwoTierBoundary,exceedsTwoTier,fabricTier
+    backendLabel,isCustom,nicProfile,portMode,profileBasis,linksPerServer,physicalPortsPerServer,hostInterfaceSpeed,physicalPortsPerGpu,atTwoTierBoundary,exceedsTwoTier,fabricTier
   }
 }
 function runBackendRegressionSuite(){
@@ -1385,7 +1418,9 @@ function runBackendRegressionSuite(){
     add(`${name} · switch-host transceivers`,b.switchHostOptics===expectedSwitchHost,
         `${b.switchHostOptics} optics = host-facing 800G cages across all planes`);
 
-    const expectedHostOptics=b.isCustom ? b.gpus*b.physicalPortsPerGpu : b.gpus;
+    const expectedHostOptics=b.isCustom
+      ? (b.profileBasis==='server' ? nodes*b.physicalPortsPerServer : b.gpus*b.physicalPortsPerGpu)
+      : b.gpus;
     add(`${name} · host transceivers`,b.hostOptics===expectedHostOptics,
         `${b.hostOptics} host optics expected ${expectedHostOptics}`);
 
@@ -1484,6 +1519,29 @@ function runBackendRegressionSuite(){
   ];
   [4,16,32,64,128,256].forEach(nodes=>{
     cx9Profiles.forEach(x=>checkCase(`${x.n} · ${nodes} nodes`,nodes,'custom','rail',8,x.p));
+  });
+
+  // AMD MI355X is an 8-GPU server profile, but fabric demand follows the
+  // configured server NIC count and speed rather than an NVIDIA NIC template.
+  const amdDefault={nicProfile:'amd-mi355x',profileBasis:'server',portMode:'sp_sp',planes:1,
+    hostInterfaceSpeed:400,linkSpeed:400,linksPerServer:8,physicalPortsPerServer:8};
+  const amdDefaultCase=checkCase('AMD MI355X default 8×400G/server',16,'custom','rail',8,amdDefault,{
+    gpus:128,planes:1,speed:400,physicalHostLinks:128,hostOptics:128,linksPerServer:8
+  });
+  add('AMD MI355X default · server-based NIC math',
+      amdDefaultCase.physicalHostLinks===16*8 && amdDefaultCase.hostOptics===16*8,
+      `${amdDefaultCase.physicalHostLinks} links and ${amdDefaultCase.hostOptics} host optics = 16 servers × 8 NICs`);
+
+  const amdFourNic={nicProfile:'amd-mi355x',profileBasis:'server',portMode:'dp_dp',planes:2,
+    hostInterfaceSpeed:200,linkSpeed:200,linksPerServer:4,physicalPortsPerServer:4};
+  checkCase('AMD MI355X configurable 4×200G/server dual-plane',16,'custom','rail',8,amdFourNic,{
+    gpus:128,planes:2,speed:200,physicalHostLinks:64,hostOptics:64,linksPerServer:4
+  });
+
+  const amdEightHundred={nicProfile:'amd-mi355x',profileBasis:'server',portMode:'dp_dp',planes:2,
+    hostInterfaceSpeed:800,linkSpeed:800,linksPerServer:8,physicalPortsPerServer:8};
+  checkCase('AMD MI355X configurable 8×800G/server dual-plane',8,'custom','rail',8,amdEightHundred,{
+    gpus:64,planes:2,speed:800,physicalHostLinks:64,hostOptics:64,linksPerServer:8
   });
 
   const failed=results.filter(x=>!x.pass);
@@ -1756,7 +1814,7 @@ function topologyVisual(ctx){
       <rect x="${x}" y="${nodeY}" width="${nodeW}" height="${nodeH}" rx="8" fill="#0b2433" stroke="#38bdf8" stroke-width="1.4"/>
       <text x="${cx}" y="${nodeY+18}" text-anchor="middle" fill="#f8fafc" font-size="9" font-weight="700">GPU Node ${i+1}</text>
       <text x="${cx}" y="${nodeY+34}" text-anchor="middle" fill="#86efac" font-size="8">${top==='rail'?`G1–G${gpusPerNode} → rails`:`${gpusPerNode} GPUs`}</text>
-      <text x="${cx}" y="${nodeY+48}" text-anchor="middle" fill="#94a3b8" font-size="7">${be.logicalPerGpu}×${be.speed}G/GPU · ${be.planes===2?'2 planes':'1 plane'}</text>
+      <text x="${cx}" y="${nodeY+48}" text-anchor="middle" fill="#94a3b8" font-size="7">${be.profileBasis==='server'?`${be.linksPerServer}×${be.speed}G/server`:`${be.logicalPerGpu}×${be.speed}G/GPU`} · ${be.planes===2?'2 planes':'1 plane'}</text>
     </g>`;
   }
   if(nodes>shown){
@@ -1865,7 +1923,7 @@ function topologyVisual(ctx){
       <div class="topology-stat"><b>${be.totalLeaves}</b>Backend leaves</div>
       <div class="topology-stat"><b>${be.totalSpines}</b>Backend spines</div>
       ${be.totalSuperspines?`<div class="topology-stat"><b>${be.totalSuperspines}</b>Backend superspines</div>`:''}
-      <div class="topology-stat"><b>${be.logicalPerGpu}×${be.speed}G</b>Backend links / GPU</div>
+      <div class="topology-stat"><b>${be.profileBasis==='server'?`${be.linksPerServer}×${be.speed}G`:`${be.logicalPerGpu}×${be.speed}G`}</b>Backend links / ${be.profileBasis==='server'?'server':'GPU'}</div>
       <div class="topology-stat"><b>${be.speed}G</b>Logical fabric links · 1:1</div>
       <div class="topology-stat"><b>${fe.leaves + fe.spines}</b>Compute frontend switches</div>
       <div class="topology-stat"><b>${vn.switches}</b>VAST storage leaves</div>
@@ -1929,15 +1987,20 @@ function calc(){
   const customNicProfile=isCustom?($('customNicProfile').value||'cx8'):null;
   const customNicPortMode=isCustom?($('customNicPortMode').value||'sp_dp'):null;
   const customNicSpeed=isCustom?(customNicProfile==='cx7'?400:customNicProfile==='cx8'?800:Math.max(100,+$('customNicSpeed').value||400)):null;
+  const amdNicsPerServer=isAmdMi355x?Math.max(1,Math.min(32,+$('amdNicsPerServer')?.value||8)):null;
+  const amdNicSpeed=isAmdMi355x?Math.max(200,+$('amdNicSpeed')?.value||400):null;
+  const amdFabricPlanes=isAmdMi355x?Math.max(1,Math.min(2,+$('amdFabricPlanes')?.value||1)):null;
   let customBackendProfile=null;
   if(isAmdMi355x){
     customBackendProfile={
       nicProfile:'amd-mi355x',
-      portMode:'sp_sp',
-      hostInterfaceSpeed:400,
-      linkSpeed:400,
-      linksPerGpu:1,
-      physicalPortsPerGpu:1
+      profileBasis:'server',
+      portMode:amdFabricPlanes===2?'dp_dp':'sp_sp',
+      planes:amdFabricPlanes,
+      hostInterfaceSpeed:amdNicSpeed,
+      linkSpeed:amdNicSpeed,
+      linksPerServer:amdNicsPerServer,
+      physicalPortsPerServer:amdNicsPerServer
     };
   }else if(isRubinNvl8){
     const rubinMode=$('rubinNicMode')?.value||'sp_dp';
@@ -1969,9 +2032,8 @@ function calc(){
   const mode=isB300?$('b300mode').value:((isCustom||isRubinNvl8||isAmdMi355x)?'custom':'single800'),top=$('backendTopology').value,pid=$('backendSwitch').value;
   if(isAmdMi355x){
     if($('backendSwitch')){
-      $('backendSwitch').value='N9364E-SG2X-O';
-      $('backendSwitch').disabled=true;
-      $('backendSwitch').title='AMD MI355X default: Cisco N9364E-SG2X-O Silicon One backend. Spectrum-X is not required.';
+      $('backendSwitch').disabled=false;
+      $('backendSwitch').title='AMD MI355X recommended default: Cisco N9364E-SG2X-O Silicon One. An SE may override it for comparison.';
     }
     if($('backendOptic'))$('backendOptic').disabled=false;
   }else if(isRubinNvl8 && $('backendOptic')){
@@ -2357,16 +2419,16 @@ function calc(){
     add('AI Backend Superspine',pid,'AI fabric superspine switch',be.totalSuperspines,`${be.superspinesPerPlane}/plane × ${be.planes} plane(s) · ${be.ssCoresPerPlane} cores/plane · ${be.ssPerCore} superspines/core`,'Cisco B300/CX8 large-scale RA sample');
   }
   if(isCustom || isRubinNvl8 || isAmdMi355x){
-    const nicLabel=be.nicProfile==='amd-mi355x'?'AMD MI355X 400G RoCE':be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':'Custom NIC';
+    const nicLabel=be.nicProfile==='amd-mi355x'?`AMD MI355X ${be.speed}G RoCE`:be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':'Custom NIC';
     let customHostPid,customHostDesc,customHostStatus;
     if(be.nicProfile==='cx9-rubin'){
       customHostPid='MMS4X00-NM-HGX';
       customHostDesc='NVIDIA 800G twin-port OSFP host optic · 2×400G · SMF · dual DR4 · 500 m';
       customHostStatus='Published NVIDIA Rubin NVL8 host optic; validate exact Supermicro SYS-222GS implementation and Cisco switch-side interoperability';
     }else if(be.nicProfile==='amd-mi355x'){
-      customHostPid='TBD-400G-AMD-ROCE-HOST';
-      customHostDesc='400G RoCE host-side optic / cable assembly for MI355X server NIC';
-      customHostStatus='Validate exact OEM NIC (AMD Pensando / Broadcom / other qualified 400G RoCE adapter), optic and cable assembly';
+      customHostPid=`TBD-${be.speed}G-AMD-ROCE-HOST`;
+      customHostDesc=`${be.speed}G RoCE host-side optic / cable assembly for MI355X server NIC`;
+      customHostStatus=`Validate exact OEM NIC, ${be.speed}G optic and cable assembly for the selected MI355X server`;
     }else if(be.nicProfile==='cx7'){
       if(be.portMode==='dp_dp'){
         customHostPid='QSFP-200G-SR4-S=';
@@ -2396,8 +2458,11 @@ function calc(){
       customHostDesc=`${be.hostInterfaceSpeed}G physical host-interface optic · ${backendOpticMedia}`;
       customHostStatus='Validate exact GPU NIC / adapter, optic PID and connector/cable assembly';
     }
+    const customHostBasis=be.profileBasis==='server'
+      ? `${nicLabel} · ${be.physicalPortsPerServer} physical host optic${be.physicalPortsPerServer===1?'':'s'}/server → ${be.linksPerServer} × ${be.speed}G active link${be.linksPerServer===1?'':'s'}/server across ${be.planes} plane${be.planes===1?'':'s'} · ${be.physicalHostLinks} logical host links total`
+      : `${nicLabel} · ${be.portMode==='sp_dp'?'Single Port / Dual Plane':be.portMode==='dp_dp'?'Dual Port / Dual Plane':'Single Port / Single Plane'} · ${be.physicalPortsPerGpu} physical host optic${be.physicalPortsPerGpu===1?'':'s'}/GPU → ${be.logicalPerGpu} × ${be.speed}G active network link${be.logicalPerGpu===1?'':'s'} · ${be.physicalHostLinks} logical host links total`;
     add('AI Backend Host Optics',customHostPid,customHostDesc,be.hostOptics,
-      `${nicLabel} · ${be.portMode==='sp_dp'?'Single Port / Dual Plane':be.portMode==='dp_dp'?'Dual Port / Dual Plane':'Single Port / Single Plane'} · ${be.physicalPortsPerGpu} physical host optic${be.physicalPortsPerGpu===1?'':'s'}/GPU → ${be.logicalPerGpu} × ${be.speed}G active network link${be.logicalPerGpu===1?'':'s'} · ${be.physicalHostLinks} logical host links total`,
+      customHostBasis,
       customHostStatus);
   }else add('AI Backend Optics',backendHost800Pid,backendHost800Desc,be.hostOptics,`1 physical 800G optic per GPU · media matched to ${backendOpticPid} (${backendOpticMedia}, ${backendOpticReach})`,backendOpticIsVr8?'Validated ConnectX-8 800GE RHS module family; confirm exact server qualification':'Validated ConnectX-8 800GE RHS module family; confirm exact server qualification');
   const opticFamily=backendOpticIsVr8?'VR8':'DR8';
@@ -2598,8 +2663,10 @@ function calc(){
   }
   q.push(`<b class="good">PASS</b> Server/GPU terminology: ${nodes} nodes = ${be.gpus} GPUs.`);
   q.push(`${tmgQualified(pid,backendOpticPid)?'<b class="good">PASS</b>':'<b class="bad">CHECK</b>'} Backend optic: ${backendOpticPid} on ${pid} · ${backendOpticMedia} · ${backendOpticReach}.${backendOpticIsVr8?' Short-reach VR8 selected; confirm OM4/OM5 path is within 50 m.':' Long-reach DR8 selected; confirm SMF path.'}`);
-  if(!isCustom){
+  if(!isCustom && !isAmdMi355x){
     q.push(`<b class="good">PASS</b> Host/switch media match: ${backendHost800Pid} (${backendOpticMedia}) on the GPU/NIC side follows ${backendOpticPid} (${backendOpticMedia}) on the switch side.`);
+  }else if(isAmdMi355x){
+    q.push(`<b class="warn">CHECK</b> AMD host media: validate the exact ${be.speed}G OEM RoCE NIC, host optic/cable, connector and ${backendOpticMedia} interoperability with ${backendOpticPid} on ${pid}.`);
   }else if(customNicProfile==='cx7'){
     q.push(`<b class="good">PASS</b> ConnectX-7 Cisco preset uses MMF and forces ${backendOpticPid} on the switch side. ${customNicPortMode==='sp_dp'?'Single Port / Dual Plane: QDD-400G-SR8= host optic split to 2×200G, one per plane; validate fanout interoperability.':customNicPortMode==='dp_dp'?'Dual Port / Dual Plane: 2× QSFP-200G-SR4-S= host optics/GPU, one 200G port per plane; validate exact dual-port adapter SKU.':'Single Port / Single Plane: QDD-400G-SR8= host optic, 1×400G on one plane.'}`);
   }else if(customNicProfile==='cx8'){
@@ -2624,8 +2691,10 @@ function calc(){
   if(vastEnabled)q.push(`<b class="good">CCW ACTION</b> VAST hierarchy: add VAST-DATA-MLB → confirm ${eq} × UCSC-C225M8N-EBOX and VAST Nexus hardware children → select VAST-DATA-SPLUS → configure ${vastCapacityLicenses} × VAST-SW-1TB, ${vastCoreLicenses} × VAST-SW-1CPU-CORE, VAST-PS-COPILOT, and ${vastInstallServiceQty} × VAST-PS.`);
 
   if(isAmdMi355x){
-    q.push(`<b class="good">AMD MI355X PROFILE</b> ${nodes} servers × 8 GPUs = ${be.gpus} MI355X GPUs. Backend planning uses 1×400G RoCE link/GPU (8×400G/server) on Cisco <b>N9364E-SG2X-O Silicon One</b>. Spectrum-X is not required. Exact OEM NIC, host optic/cable and server physical specifications remain validation items.`);
-    q.push(`<b class="${pid==='N9364E-SG2X-O'?'good':'bad'}">${pid==='N9364E-SG2X-O'?'PASS':'FAIL'}</b> AMD backend default switch: ${pid}. Expected N9364E-SG2X-O.`);
+    const amdGpuPerNic=8/amdNicsPerServer;
+    q.push(`<b class="good">AMD MI355X PROFILE</b> ${nodes} servers × 8 GPUs = ${be.gpus} MI355X GPUs. Backend demand is driven by the configured <b>${amdNicsPerServer}×${amdNicSpeed}G RoCE links/server</b> across ${amdFabricPlanes} plane${amdFabricPlanes===1?'':'s'} (${amdGpuPerNic.toFixed(2).replace(/\.00$/,'')} GPU/NIC planning ratio), not by an NVIDIA NIC template. Spectrum-X is not required. Exact OEM NIC, host optic/cable and server physical specifications remain validation items.`);
+    q.push(`<b class="${pid==='N9364E-SG2X-O'?'good':'warn'}">${pid==='N9364E-SG2X-O'?'PASS':'REVIEW'}</b> AMD backend switch: ${pid}. Recommended default is N9364E-SG2X-O Silicon One; validate any SE override.`);
+    if(amdFabricPlanes===2 && amdNicsPerServer%2!==0)q.push(`<b class="warn">CHECK</b> Dual-plane AMD profile has an odd NIC count (${amdNicsPerServer}/server). The engine sizes symmetric plane blocks to the busier plane; use an even NIC count for a balanced per-server split.`);
   }
   if(platform==='b300')q.push(`<b class="good">PASS</b> C880A CCW ordering: ${computeMlb} → ${computeAto} × ${nodes}; current Cisco guide lists B301–B308 and requires power-cable selection in the configurator.`);
   if(platform==='h200')q.push(`<b class="warn">CHECK</b> C885A CCW ordering: current guide workflow references ${computeAto} under ${computeMlb}, but its current public PID table emphasizes MI350X configurations. Validate H11/H200 availability and exact fixed configuration in CCW before booking.`);
