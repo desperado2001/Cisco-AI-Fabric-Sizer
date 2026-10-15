@@ -2356,7 +2356,7 @@ function calc(){
   if(be.totalSuperspines){
     add('AI Backend Superspine',pid,'AI fabric superspine switch',be.totalSuperspines,`${be.superspinesPerPlane}/plane × ${be.planes} plane(s) · ${be.ssCoresPerPlane} cores/plane · ${be.ssPerCore} superspines/core`,'Cisco B300/CX8 large-scale RA sample');
   }
-  if(isCustom || isRubinNvl8){
+  if(isCustom || isRubinNvl8 || isAmdMi355x){
     const nicLabel=be.nicProfile==='amd-mi355x'?'AMD MI355X 400G RoCE':be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':'Custom NIC';
     let customHostPid,customHostDesc,customHostStatus;
     if(be.nicProfile==='cx9-rubin'){
