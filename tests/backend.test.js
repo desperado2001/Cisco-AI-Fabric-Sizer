@@ -19,6 +19,47 @@ test('embedded backend regression suite passes', () => {
   assert.equal(result.failed, 0);
 });
 
+test('MI355X single-plane default conserves links, optics and switch capacity across scales', () => {
+  const profile = {nicProfile:'amd-mi355x', profileBasis:'server', portMode:'sp_sp',
+    planes:1, hostInterfaceSpeed:400, linkSpeed:400, linksPerServer:8, physicalPortsPerServer:8};
+  for (const nodes of [1,4,16,32,64,80,128,563,630,1000,1024,1025,2048,4096]) {
+    for (const topology of ['rail','classic']) {
+      const d = api.backendDesign(nodes, 'custom', topology, 8, profile);
+      assert.equal(d.planes, 1);
+      assert.equal(d.physicalHostLinks, nodes*8);
+      assert.equal(d.hostOptics, nodes*8);
+      assert.equal(d.hostLinkDist.reduce((a,b)=>a+b,0), nodes*8);
+      assert.equal(d.leafSpineOptics, d.physicalLeafSpineLinks*2);
+      assert.ok(d.hostCageDist.every((c,i)=>c+d.uplinkDist[i]<=64));
+      assert.ok(d.physicalLeafSpineLinks<=d.spinesPerPlane*64);
+      assert.ok(d.physicalLeafSpineLinks*800>=nodes*8*400);
+      assert.equal(d.ciscoCx8DualRA, false);
+    }
+  }
+});
+
+test('Cisco B300/CX8 published deck anchors remain exact', () => {
+  for (const [g,leaves,spines,ss] of [
+    [256,4,2,0],[512,8,4,0],[1024,16,8,0],[8192,128,64,0],
+    [10240,160,160,128],[16384,256,256,128],[32768,512,512,256]
+  ]) {
+    const d=api.backendDesign(g/8,'dual400','rail',8,null);
+    assert.deepEqual([d.leavesPerPlane,d.spinesPerPlane,d.superspinesPerPlane],[leaves,spines,ss]);
+  }
+});
+
+test('GB300 OOB choices enforce the guardrail across deployment scales', () => {
+  for (const racks of [1,2,3,8,16,32,64,72]) {
+    for (const mode of ['auto','direct','stp','spine']) {
+      const d=api.gb300OobDesign(racks,12,5,3,24,mode);
+      assert.equal(d.inRackMgmtSwitches,racks*2);
+      assert.equal(d.rackTor100gLinks,racks*4);
+      if(racks>2)assert.equal(d.selectedMode,'spine');
+      else assert.equal(d.selectedMode,mode==='auto'?'direct':mode);
+    }
+  }
+});
+
 test('MI355X default uses eight 400G server NICs without NVIDIA-specific geometry', () => {
   const profile = {
     nicProfile: 'amd-mi355x',

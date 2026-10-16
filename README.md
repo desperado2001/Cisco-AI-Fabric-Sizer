@@ -4,7 +4,7 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
 
 ## Canonical application
 - `main/index.html`
-- Current baseline: v74
+- Current baseline: v75
 
 ## Current design decisions
 - NVIDIA GB300 NVL72 OOB:
@@ -14,7 +14,8 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
   - Reuse the existing server-based HGX/NVL8-style sizing framework rather than the NVL72 rack-scale model.
   - Default AI backend switch: **Cisco N9364E-SG2X-O (Silicon One)**.
   - Do not make Spectrum-X a dependency for AMD.
-  - Default backend assumption: **8 independent 400G RoCE NIC links per server**, equivalent to a 1:1 NIC-to-GPU planning mapping.
+  - Selecting MI355X restores **single plane, 8 independent 400G RoCE NIC links per server**, equivalent to a 1:1 NIC-to-GPU planning mapping. Pollara 400 is a 400G adapter; a CX8-style 2×400G split per NIC is not assumed.
+  - Dual-plane placement is an OEM override that splits separate NICs between fabrics, not a validated breakout mode or dual attachment for every GPU.
   - The UI exposes NICs per server, active link speed (200G/400G/800G), and single- or dual-plane placement. BOM, topology, switch counts, optics, and validation use those configured server-level values.
   - Dual-plane profiles should use an even NIC count for a balanced per-server split; odd counts are sized conservatively to the busier plane and called out for review.
   - The N9364E-SG2X-O is the recommended default, not a forced lock. An SE override is allowed but flagged for validation.

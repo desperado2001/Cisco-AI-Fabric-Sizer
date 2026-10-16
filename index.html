@@ -183,7 +183,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
           </select></div>
           <div><label>Backend fabric planes</label><select id="amdFabricPlanes" onchange="calc()">
             <option value="1" selected>Single plane</option>
-            <option value="2">Dual plane — split NICs evenly</option>
+            <option value="2">Dual plane — OEM override, split separate NICs</option>
           </select></div>
         </div>
         <div class="footer-note"><b>AMD default:</b> 8 independent 400G RoCE NIC links per 8-GPU server (1:1 NIC-to-GPU planning mapping) on Cisco N9364E-SG2X-O Silicon One. Change the NIC count, link speed, or plane count to match the selected OEM server. Dual-plane designs should use an even NIC count so each plane receives the same number of links. Spectrum-X is not required.</div>
@@ -888,6 +888,9 @@ function syncPlatform(){
     if($('backendTopology'))$('backendTopology').disabled=false;
   }
   if(isAmdMi355x){
+    if($('amdFabricPlanes'))$('amdFabricPlanes').value='1';
+    if($('amdNicsPerServer'))$('amdNicsPerServer').value='8';
+    if($('amdNicSpeed'))$('amdNicSpeed').value='400';
     if($('backendTopology'))$('backendTopology').value='rail';
     if($('backendSwitch'))$('backendSwitch').value='N9364E-SG2X-O';
     if($('backendOptic'))$('backendOptic').value='OSFP-800G-DR8';
