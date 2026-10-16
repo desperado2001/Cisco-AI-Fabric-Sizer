@@ -1025,8 +1025,22 @@ function gb300EastWestDesign(activeRacks){
   const planes=2, speed=400, logicalPerGpu=2;
   const leavesPerPlane=raScaleUnits*4;          // four rail groups; +1 leaf/group/SU
   const totalLeaves=leavesPerPlane*planes;
-  const totalSpines=gb300SpinesForFabricRacks(fabricRacks);
+  const threeTier=active>64;
+  // Derived folded Clos: each 2-rack pod has 4 leaves and 3 local spines/plane.
+  // Each leaf uses 6x800G to each local spine (18 total). Each spine uses
+  // 24x800G down and 24x800G up: 48 of 64 cages, with 1:1 bandwidth.
+  const totalSpines=threeTier?raScaleUnits*3*planes:gb300SpinesForFabricRacks(fabricRacks);
   const spinesPerPlane=totalSpines?totalSpines/2:0;
+  let ssPerCore=0;
+  if(threeTier){
+    ssPerCore=Math.ceil(raScaleUnits*24/64);
+    // Balance whole 800G links, keeping every superspine within 64 cages.
+    while(ssPerCore<=24 && raScaleUnits*Math.ceil(24/ssPerCore)>64)ssPerCore++;
+  }
+  const derivedCapacityExceeded=threeTier && (raScaleUnits>64 || ssPerCore>24);
+  const superspinesPerPlane=threeTier?3*ssPerCore:0;
+  const totalSuperspines=superspinesPerPlane*planes;
+  const physicalSpineSuperLinks=threeTier?totalSpines*24:0;
   const hostOptics=gpus;                        // 1x 800G RHS CX-8 optic / active GPU
   const switchHostOptics=gpus;                  // 1x 800G DR8 switch optic serves 2x400G
   const physicalHostLinks=gpus*2;               // 2x400G / GPU, one per plane
@@ -1042,15 +1056,16 @@ function gb300EastWestDesign(activeRacks){
   return {
     gpus,totalGpus:gpus,fabricGpus,fabricRacks,raScaleUnits,gpusPerNode:72,
     planes,speed,logicalPerGpu,aggregatePerGpu:800,physicalHostLinks,linksPerPlane,
-    leavesPerPlane,spinesPerPlane,superspinesPerPlane:0,totalLeaves,totalSpines,totalSuperspines:0,
+    leavesPerPlane,spinesPerPlane,superspinesPerPlane,totalLeaves,totalSpines,totalSuperspines,
     hostLinkDist:hl,hostCageDist:hc,uplinkDist:up,hostOptics,switchHostOptics,
     physicalLeafSpineLinks,leafSpineOptics,logicalLeafSpineLinksPerPlane:logicalLeafSpineLinks/2,logicalLeafSpineLinks,
-    logicalSpineSuperLinksPerPlane:0,logicalSpineSuperLinks:0,physicalSpineSuperLinks:0,spineSuperOptics:0,
-    ssCoresPerPlane:0,ssPerCore:0,linksPerLeafSpinePair400:0,linksPerSpineSuperPair400:0,
+    logicalSpineSuperLinksPerPlane:physicalSpineSuperLinks,logicalSpineSuperLinks:physicalSpineSuperLinks*2,physicalSpineSuperLinks,spineSuperOptics:physicalSpineSuperLinks*2,
+    ssCoresPerPlane:threeTier?3:0,ssPerCore,linksPerLeafSpinePair400:threeTier?12:0,linksPerSpineSuperPair400:threeTier?48/ssPerCore:0,
+    derivedCapacityExceeded,gb300DerivedThreeTier:threeTier,
     ciscoCx8DualRA:true,gb300Nvl72Ra:true,validatedScaleExceeded:active>64,
-    backendLabel:active>64?'800G aggregate / GPU · 2×400G · dual plane · spine capacity allowance; topology review required':'800G aggregate / GPU · 2×400G · dual plane · GB300 NVL72 RA',
+    backendLabel:threeTier?'800G aggregate / GPU · 2×400G · dual plane · derived 1:1 three-tier fabric':'800G aggregate / GPU · 2×400G · dual plane · GB300 NVL72 RA',
     isCustom:false,nicProfile:'cx8',portMode:'sp_dp',hostInterfaceSpeed:800,physicalPortsPerGpu:1,
-    atTwoTierBoundary:fabricRacks===64,exceedsTwoTier:active>64,fabricTier:active>64?'3-tier review':'2-tier',
+    atTwoTierBoundary:fabricRacks===64,exceedsTwoTier:active>64,fabricTier:threeTier?'3-tier':'2-tier',
     hostLeafCables,leafSpineCables
   };
 }
@@ -1634,6 +1649,7 @@ function gb300TopologyVisual(ctx){
     ${box(700,90,430,60,`${be.spinesPerPlane} × ${pid} Spines`,`${be.physicalLeafSpineLinks/be.planes} × 800G leaf-spine links`,'#2563eb','#07172a',11)}
     ${box(700,170,430,60,`${be.leavesPerPlane} × ${pid} Rail Leaves`,`72 × 400G active GPU links/rack into Plane 2`,'#60a5fa','#0a1c33',11)}
     ${line(915,150,915,170,'#60a5fa',3)}
+    ${be.totalSuperspines?box(410,238,380,38,`${be.superspinesPerPlane} Superspines / Plane`,`${be.ssCoresPerPlane} groups × ${be.ssPerCore} switches · derived 1:1 Clos`,'#a78bfa','#1b1630',10):''}
 
     ${box(410,285,380,120,rackLabel,
       `72 GPUs/rack · 72 × CX-8 · 18 × BF3 B3240 · ${gb300Oob?.inRackMgmtSwitches||nodes*2} × N93108TC-FX3 rack OOB ToRs`,
@@ -2184,7 +2200,9 @@ function calc(){
   const theoreticalTwoTierGpuBoundary=8192;
   const largeScaleReview=be.fabricTier!=='2-tier';
   const atLargeScaleBoundary=be.atTwoTierBoundary;
-  if(be.gb300Nvl72Ra){
+  if(be.gb300DerivedThreeTier){
+    $('fabricScaleNote').innerHTML=`<b class="${be.derivedCapacityExceeded?'warn':'good'}">Derived GB300 three-tier fabric${be.derivedCapacityExceeded?' exceeds modeled port capacity':''}.</b><br>${be.leavesPerPlane} leaves + ${be.spinesPerPlane} spines + ${be.superspinesPerPlane} superspines per plane. Each two-rack pod uses 4 leaves and 3 local spines; each spine reserves 24×800G down and 24×800G up. Superspines form 3 groups of ${be.ssPerCore}, using whole 800G links. Engineering derivation from the GB300 building block and generic Three-Tier worksheet; OEM/BU validation required.`;
+  }else if(be.gb300Nvl72Ra){
     $('fabricScaleNote').innerHTML =
       `<b class="good">GB300 NVL72 dual-plane RA sizing active.</b><br>${nodes} active rack${nodes===1?'':'s'} / ${be.gpus} active GPUs · ${be.raScaleUnits} × 2-rack / 144-GPU SU · fabric capacity ${be.fabricRacks} racks / ${be.fabricGpus} GPUs · ${be.leavesPerPlane} leaves + ${be.spinesPerPlane} spines per plane. Active host optics/cables follow active GPUs; leaf/spine switching is provisioned to complete SU capacity.`;
   }else if(be.ciscoCx8DualRA && be.totalSuperspines>0){
@@ -2428,9 +2446,9 @@ function calc(){
   }
 
   add('AI Backend Leaf',pid,'AI fabric leaf switch',be.totalLeaves,`${be.leavesPerPlane}/plane × ${be.planes} plane(s)`,'CVD / RA aligned where applicable');
-  add('AI Backend Spine',pid,'AI fabric spine switch',be.totalSpines,`${be.spinesPerPlane}/plane × ${be.planes} plane(s)`,be.gb300Nvl72Ra&&be.validatedScaleExceeded?'Capacity-based lower bound beyond 64 racks; topology and superspine design unresolved':'CVD / RA aligned where applicable');
+  add('AI Backend Spine',pid,'AI fabric spine switch',be.totalSpines,`${be.spinesPerPlane}/plane × ${be.planes} plane(s)`,be.gb300DerivedThreeTier?'Derived GB300 1:1 Clos; 24×800G down + 24×800G up per spine; BU validation required':'CVD / RA aligned where applicable');
   if(be.totalSuperspines){
-    add('AI Backend Superspine',pid,'AI fabric superspine switch',be.totalSuperspines,`${be.superspinesPerPlane}/plane × ${be.planes} plane(s) · ${be.ssCoresPerPlane} cores/plane · ${be.ssPerCore} superspines/core`,'Cisco B300/CX8 large-scale RA sample');
+    add('AI Backend Superspine',pid,'AI fabric superspine switch',be.totalSuperspines,`${be.superspinesPerPlane}/plane × ${be.planes} plane(s) · ${be.ssCoresPerPlane} cores/plane · ${be.ssPerCore} superspines/core`,be.gb300DerivedThreeTier?'Derived GB300 Clos from reference port geometry; BU validation required':'Cisco B300/CX8 large-scale RA sample');
   }
   if(isCustom || isRubinNvl8 || isAmdMi355x){
     const nicLabel=be.nicProfile==='amd-mi355x'?`AMD MI355X ${be.speed}G RoCE`:be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':'Custom NIC';
@@ -2489,6 +2507,7 @@ function calc(){
   }
   if(be.totalSuperspines){
     add('AI Backend Optics',backendOpticPid,`800G ${opticFamily} spine-superspine optical endpoint`,be.spineSuperOptics,`${be.physicalSpineSuperLinks} 800G-equivalent links × 2 endpoints · ${be.logicalSpineSuperLinks} logical 400G links · 1:1`,tmgStatus(pid,backendOpticPid));
+    if(be.gb300DerivedThreeTier)add('AI Backend Cabling','CB-M12-M12-SMF','MPO-12 SMF cable — spine to superspine',be.physicalSpineSuperLinks*2,'Two MPO-12 cables per 800G DR8 link','Derived GB300 three-tier cabling');
   }
 
   if(frontendEnabled){
@@ -2736,7 +2755,9 @@ function calc(){
     q.push(`<b class="good">PASS</b> CVD scale point: 256 GPUs / 32 nodes reuses the fully populated 4-leaf + 2-spine per-plane block.`);
   if(!isCustom && mode==='dual400' && top==='rail' && nodes===64 && be.leavesPerPlane===8 && be.spinesPerPlane===4)
     q.push(`<b class="good">PASS</b> 512-GPU sizing: 64 nodes = 8 leaves + 4 spines per plane (16 leaves + 8 spines total).`);
-  if(be.exceedsTwoTier){
+  if(be.gb300DerivedThreeTier){
+    q.push(`<b class="${be.derivedCapacityExceeded?'bad':'warn'}">${be.derivedCapacityExceeded?'CAPACITY EXCEEDED':'DERIVED THREE-TIER'}</b> GB300 E-W: ${be.spinesPerPlane} spines and ${be.superspinesPerPlane} superspines per plane. Each local spine uses 24×800G down and 24×800G up. ${be.derivedCapacityExceeded?'Deployment exceeds this derived layout\'s 128-rack capacity; do not use this BOM as a complete design.':'Whole-link distribution fits the 64-cage switch budget with 1:1 bandwidth.'} This is an engineering derivation; validate with Cisco BU/OEM.`);
+  }else if(be.exceedsTwoTier){
     const scaleReviewLabel=isAmdMi355x?'LARGE-SCALE FABRIC VALIDATION':'ARCHITECTURE REVIEW';
     const scaleReviewAction=isAmdMi355x
       ? 'Validate the multi-pod / superspine design with Cisco, AMD, and the selected server/NIC vendor; inter-pod oversubscription is not auto-assumed.'

@@ -203,20 +203,28 @@ test('GB300 NVL72 sizing anchor remains unchanged', () => {
   );
 });
 
-test('GB300 beyond 64 racks retains a nonzero capacity-based spine allowance', () => {
+test('GB300 beyond 64 racks derives a whole-link nonblocking three-tier fabric', () => {
   const d=api.gb300EastWestDesign(70);
   assert.equal(d.gpus,5040);
   assert.equal(d.totalLeaves,280);
-  assert.equal(d.spinesPerPlane,40);
-  assert.equal(d.totalSpines,80);
+  assert.equal(d.spinesPerPlane,105);
+  assert.equal(d.totalSpines,210);
+  assert.equal(d.superspinesPerPlane,72);
+  assert.equal(d.totalSuperspines,144);
   assert.ok(d.physicalLeafSpineLinks<=d.totalSpines*64);
   assert.equal(d.validatedScaleExceeded,true);
-  assert.equal(d.fabricTier,'3-tier review');
-  for(const racks of [65,66,72,128,256]) {
+  assert.equal(d.fabricTier,'3-tier');
+  for(const racks of [65,66,70,72,96,128]) {
     const design=api.gb300EastWestDesign(racks);
-    assert.ok(design.totalSpines>0);
-    assert.ok(design.physicalLeafSpineLinks<=design.totalSpines*64);
+    assert.equal(design.derivedCapacityExceeded,false);
+    assert.equal(design.physicalLeafSpineLinks,design.physicalSpineSuperLinks);
+    assert.ok(24+24<=64);
+    const distribution=Array.from({length:design.ssPerCore},(_,i)=>Math.floor(24/design.ssPerCore)+(i<24%design.ssPerCore?1:0));
+    assert.equal(distribution.reduce((a,b)=>a+b,0),24);
+    assert.ok(distribution.every(links=>Number.isInteger(links)&&links>0&&links*design.raScaleUnits<=64));
+    assert.equal(design.spineSuperOptics,design.physicalSpineSuperLinks*2);
   }
+  assert.equal(api.gb300EastWestDesign(130).derivedCapacityExceeded,true);
 });
 
 test('GB300 OOB guardrail preserves small-rack choices and forces spine-leaf above two racks', () => {
