@@ -4,7 +4,7 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
 
 ## Canonical application
 - `main/index.html`
-- Current baseline: v79
+- Current baseline: v80
 
 ## Current design decisions
 - NVIDIA GB300 NVL72 OOB:
@@ -12,7 +12,9 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
   - Supplied Cisco TMG screenshots (2026-10-16) confirm QSFP-40G-SR4-S (40G, MPO-12 UPC MMF, up to 150 m) and QSFP-100G-DR-S (100G, duplex LC UPC SMF, 500 m) on N9336C-SE1 from NX-OS 10.6(1). BOM spare-ordering PIDs append `=`.
   - 1–2 racks may use direct handoff, simple STP aggregation, or spine-leaf OOB.
   - More than 2 NVL72 racks requires spine-leaf OOB.
-- GB300 E-W above 64 racks uses a derived three-tier Clos: per plane, each two-rack pod has 4 leaves and 3 local spines. Every leaf connects 6×800G to each local spine. Each spine uses 24×800G down and 24×800G up. Three superspine groups each receive one spine from every pod. Group size is the smallest integer `s` with `pods × ceil(24/s) <= 64`, with positive whole links to each group member. At 70 racks: 280 leaves, 210 spines, 144 superspines total across two planes. This preserves 1:1 bandwidth and port capacity through 128 racks; larger designs are explicitly flagged. Derived from NVL72 deck slide 21 and the generic Three-Tier worksheet, rather than an exact published GB300 topology. BU/OEM validation remains required.
+- GB300 E-W first attempts a compact two-tier rail mapping above the legacy 64-rack reference range. The solver uses link speed, switch bandwidth, 64 physical cages, four rails, integer leaf-to-spine links, and uplink bandwidth at least equal to host bandwidth. It fits through 113 racks / 8,136 GPUs on two 400G planes. At 70 racks: 160 leaves + 128 spines total, zero superspines. Switch-side host optics round per leaf/plane. Validate the derived rack-to-leaf breakout cabling with the OEM.
+- Only when the two-tier solver cannot fit does GB300 use the derived three-tier Clos: per plane, each two-rack pod has 4 leaves and 3 local spines, each with 24×800G down and 24×800G up. Three superspine groups each receive one spine from every pod. Group size is the smallest integer `s` with `pods × ceil(24/s) <= 64`. This three-tier derivation fits through 128 racks; larger deployments are flagged. BU/OEM validation remains required.
+- The port solver is regression-checked against 8,192 links/plane at 400G on 51.2T switches, 32,768 at 200G on 51.2T, and 129,024 at 200G on 102.4T. These are distinct reference geometries, not a universal 8K GPU threshold. The latter two tests do not add new NIC-mode selectors or implement the complete Vera Rubin NVL72 OEM profile.
 - AMD MI355X / 8-GPU server profile:
   - Reuse the existing server-based HGX/NVL8-style sizing framework rather than the NVL72 rack-scale model.
   - Default AI backend switch: **Cisco N9364E-SG2X-O (Silicon One)**.

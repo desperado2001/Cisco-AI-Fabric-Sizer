@@ -10,7 +10,7 @@ const end = html.indexOf('function frontendDesign');
 assert.ok(start >= 0 && end > start, 'backend sizing functions must remain discoverable in index.html');
 
 const api = new Function(
-  `${html.slice(start, end)}; return { backendDesign, gb300EastWestDesign, gb300OobDesign, runBackendRegressionSuite, tmgQualified };`
+  `${html.slice(start, end)}; return { backendDesign, gb300EastWestDesign, gb300OobDesign, runBackendRegressionSuite, tmgQualified, twoTierPortPlan };`
 )();
 
 test('embedded backend regression suite passes', () => {
@@ -203,18 +203,24 @@ test('GB300 NVL72 sizing anchor remains unchanged', () => {
   );
 });
 
-test('GB300 beyond 64 racks derives a whole-link nonblocking three-tier fabric', () => {
-  const d=api.gb300EastWestDesign(70);
-  assert.equal(d.gpus,5040);
-  assert.equal(d.totalLeaves,280);
-  assert.equal(d.spinesPerPlane,105);
-  assert.equal(d.totalSpines,210);
-  assert.equal(d.superspinesPerPlane,72);
-  assert.equal(d.totalSuperspines,144);
+test('GB300 selects tiers from a complete 1:1 port mapping rather than 64 racks', () => {
+  for(const racks of [65,70,96,112,113]) {
+    const design=api.gb300EastWestDesign(racks);
+    assert.equal(design.fabricTier,'2-tier');
+    assert.equal(design.totalSuperspines,0);
+    assert.ok(design.hostCageDist.every((n,i)=>n+design.uplinkDist[i]<=64));
+    assert.ok(design.leavesPerPlane*design.linksPerLeafSpinePair400<=128);
+    assert.ok(design.linksPerLeafSpinePair400*design.spinesPerPlane>=Math.max(...design.hostLinkDist));
+    assert.ok(Number.isInteger(design.linksPerLeafSpinePair400));
+    assert.equal(design.physicalLeafSpineLinks,design.totalLeaves*design.uplinkDist[0]);
+  }
+  const at70=api.gb300EastWestDesign(70);
+  assert.deepEqual([at70.totalLeaves,at70.totalSpines,at70.totalSuperspines],[160,128,0]);
+  const d=api.gb300EastWestDesign(114);
   assert.ok(d.physicalLeafSpineLinks<=d.totalSpines*64);
   assert.equal(d.validatedScaleExceeded,true);
   assert.equal(d.fabricTier,'3-tier');
-  for(const racks of [65,66,70,72,96,128]) {
+  for(const racks of [114,120,128]) {
     const design=api.gb300EastWestDesign(racks);
     assert.equal(design.derivedCapacityExceeded,false);
     assert.equal(design.physicalLeafSpineLinks,design.physicalSpineSuperLinks);
@@ -225,6 +231,16 @@ test('GB300 beyond 64 racks derives a whole-link nonblocking three-tier fabric',
     assert.equal(design.spineSuperOptics,design.physicalSpineSuperLinks*2);
   }
   assert.equal(api.gb300EastWestDesign(130).derivedCapacityExceeded,true);
+});
+
+test('two-tier capacity follows link speed and switch radix across reference plane modes', () => {
+  for(const [gpus,speed,rails,capacity] of [[8192,400,8,51200],[32768,200,8,51200],[129024,200,4,102400]]) {
+    const d=api.twoTierPortPlan(gpus,speed,rails,capacity);
+    assert.ok(d,`reference ${gpus} links/plane at ${speed}G fits`);
+    assert.ok(d.leaves*d.pairLinks<=d.radix);
+    assert.ok(d.uplinks>=Math.max(...d.host));
+  }
+  assert.equal(api.twoTierPortPlan(8193,400,4),null);
 });
 
 test('GB300 OOB guardrail preserves small-rack choices and forces spine-leaf above two racks', () => {
