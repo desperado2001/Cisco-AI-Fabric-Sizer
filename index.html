@@ -450,7 +450,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
   QDD-400G-DR4-S= on N9K-C9332D-GX2B / N9K-C9364D-GX2A;
   QSFP-200G-SR4-S= on N9K-C9332D-GX2B;
   QSFP-40G-SR4-S= on N9K-C93108TC-FX3 / N9K-C9332C for OOB leaf-spine links.
-  <b>AMD 8K two-tier anchor:</b> v72 regression-locks the default 8×400G/server MI355X profile through 8,192 GPUs without superspine. Higher user-configured NIC bandwidth may reach the switch-radix boundary earlier and is reported separately.<br>
+  <b>NVIDIA 8K two-tier anchor:</b> v73 explicitly regression-checks the supplied Cisco B300/ConnectX-8 dual-plane reference architecture at 5,040 and 8,192 GPUs without superspine.<br>
   <b>AMD large-scale validation:</b> v71 removes the NVIDIA-specific architecture-review wording from MI355X results. Designs beyond the modeled 2-tier boundary now call for Cisco/AMD/OEM validation while keeping the capacity guardrail intact.<br>
   <b>Regression baseline:</b> v70 adds automated coverage for the AMD Cisco Silicon One preset, Spectrum-X-free guidance, and the GB300 OOB guardrail while retaining the v69 sizing behavior.<br>
   <b>AMD MI355X:</b> v69 models MI355X as an 8-GPU server on the shared server-sizing engine. The backend defaults to Cisco N9364E-SG2X-O Silicon One and 8×400G RoCE/server, while NIC count, active link speed and plane count are configurable; BOM, topology and validation follow those server-level assumptions. Spectrum-X is not required, and exact OEM NIC/optic/server physical data remains validation-required.<br>
@@ -826,13 +826,6 @@ function syncSupermicroPidOptions(){
     sel.innerHTML='<option value="SYS-822GS-NB3RT1">SYS-822GS-NB3RT1 — Air · 16 DIMMs</option><option value="SYS-822GS-NB3RT2">SYS-822GS-NB3RT2 — Air · 32 DIMMs</option>';
   }else if(cooling==='liquid-lcc'){
     sel.innerHTML='<option value="SYS422GSNB3RTLCC1">SYS422GSNB3RTLCC1 — Liquid · 16 DIMMs</option><option value="SYS422GSNB3RTLCC2">SYS422GSNB3RTLCC2 — Liquid · 32 DIMMs</option>';
-  }else if(isAmdMi355x){
-    const amdProfileText=`${amdNicsPerServer}×${amdNicSpeed}G/server across ${amdFabricPlanes} plane${amdFabricPlanes===1?'':'s'}`;
-    $('fabricScaleNote').innerHTML = largeScaleReview
-      ? `<b class="warn">Configured MI355X profile exceeds the 2-tier radix envelope.</b><br>${amdProfileText} requires ${be.leavesPerPlane} leaves/plane at ${be.gpus} GPUs. The default 8×400G/server profile remains two-tier through 8,192 GPUs; higher configured server bandwidth can reach the leaf-count boundary earlier.`
-      : atLargeScaleBoundary
-        ? `<b class="good">At the MI355X 2-tier maximum reference scale.</b><br>${amdProfileText} · ${be.gpus} GPUs · ${be.leavesPerPlane} leaves/plane. Superspine is not required at this boundary.`
-        : `<b class="good">MI355X 2-tier backend appropriate.</b><br>${amdProfileText} · ${be.gpus} GPUs · ${be.leavesPerPlane} leaves/plane · ${be.spinesPerPlane} spines/plane. The default 8×400G/server profile remains two-tier through 8,192 GPUs.`;
   }else{
     sel.innerHTML='<option value="SUPERMI-B300-ALC-TBD">ALC / DLC-2 — exact server PID not shown in supplied table</option>';
   }
@@ -2736,7 +2729,7 @@ function calc(){
     const scaleReviewAction=isAmdMi355x
       ? 'Validate the multi-pod / superspine design with Cisco, AMD, and the selected server/NIC vendor; inter-pod oversubscription is not auto-assumed.'
       : 'Engage BU/CVD/NVIDIA for multi-pod / superspine design; inter-pod oversubscription is not auto-assumed.';
-    const scaleReviewProfile=isAmdMi355x?` The configured ${amdNicsPerServer}×${amdNicSpeed}G/server profile across ${amdFabricPlanes} plane${amdFabricPlanes===1?'':'s'} drives this result; the default 8×400G/server profile remains two-tier through 8,192 GPUs.`:'';
+    const scaleReviewProfile=isAmdMi355x?` The configured ${amdNicsPerServer}×${amdNicSpeed}G/server profile across ${amdFabricPlanes} plane${amdFabricPlanes===1?'':'s'} drives this result.`:'';
     q.push(`<b class="warn">${scaleReviewLabel}</b> ${be.gpus} GPUs requires ${be.leavesPerPlane} leaves/plane, beyond the ${TWO_TIER_LEAF_LIMIT_PER_PLANE}-leaf theoretical 2-tier boundary.${scaleReviewProfile} ${scaleReviewAction}`);
   }
   else if(be.atTwoTierBoundary)q.push(`<b class="warn">BOUNDARY</b> ${be.gpus} GPUs is at the theoretical ${theoreticalTwoTierGpuBoundary}-GPU / ${TWO_TIER_LEAF_LIMIT_PER_PLANE}-leaf-per-plane 2-tier boundary. Additional scale triggers architecture review.`);
