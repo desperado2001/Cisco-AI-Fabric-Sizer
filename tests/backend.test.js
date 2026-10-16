@@ -66,7 +66,7 @@ test('NVIDIA B300/CX8 dual-plane remains two-tier at 5,040 and 8,192 GPUs', () =
   assert.equal(at5040.gpus, 5040);
   assert.equal(at5040.ciscoCx8DualRA, true);
   assert.equal(at5040.leavesPerPlane, 79);
-  assert.equal(at5040.spinesPerPlane, 64);
+  assert.equal(at5040.spinesPerPlane, 40);
   assert.equal(at5040.exceedsTwoTier, false);
   assert.equal(at5040.totalSuperspines, 0);
   assert.equal(at8192.gpus, 8192);
@@ -75,6 +75,25 @@ test('NVIDIA B300/CX8 dual-plane remains two-tier at 5,040 and 8,192 GPUs', () =
   assert.equal(at8192.spinesPerPlane, 64);
   assert.equal(at8192.exceedsTwoTier, false);
   assert.equal(at8192.totalSuperspines, 0);
+});
+
+test('NVIDIA B300/CX8 shared fabric interpolates instead of rounding to hard SUs', () => {
+  const oneSu = api.backendDesign(64, 'dual400', 'rail', 8, null);
+  const betweenTwoTierAnchors = api.backendDesign(80, 'dual400', 'rail', 8, null);
+  const betweenThreeTierAnchors = api.backendDesign(1152, 'dual400', 'rail', 8, null);
+
+  assert.deepEqual(
+    [oneSu.gpus, oneSu.leavesPerPlane, oneSu.spinesPerPlane],
+    [512, 8, 4]
+  );
+  assert.deepEqual(
+    [betweenTwoTierAnchors.gpus, betweenTwoTierAnchors.leavesPerPlane, betweenTwoTierAnchors.spinesPerPlane],
+    [640, 10, 5]
+  );
+  assert.deepEqual(
+    [betweenThreeTierAnchors.gpus, betweenThreeTierAnchors.leavesPerPlane, betweenThreeTierAnchors.spinesPerPlane],
+    [9216, 144, 144]
+  );
 });
 
 test('MI355X UI preset stays on Cisco Silicon One without a Spectrum-X dependency', () => {

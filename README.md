@@ -4,7 +4,7 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
 
 ## Canonical application
 - `main/index.html`
-- Current baseline: v73
+- Current baseline: v74
 
 ## Current design decisions
 - NVIDIA GB300 NVL72 OOB:
@@ -21,7 +21,9 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
   - Beyond the modeled 128-leaf-per-plane 2-tier boundary, AMD results retain a large-scale fabric validation warning but route the review to Cisco, AMD, and the selected server/NIC vendor rather than NVIDIA.
 - NVIDIA B300 / ConnectX-8 dual-plane reference architecture:
   - Supplied Cisco BU reference material supports two-tier scale through 8,192 GPUs (128 leaves and 64 spines per plane) without superspine.
-  - The 5,040-GPU point remains two-tier at 79 leaves and 64 spines per plane.
+  - Published GPU and 512-GPU SU designs are validation anchors, not hard sizing buckets. Shared-fabric leaf and spine counts interpolate from actual port demand.
+  - The 5,040-GPU point remains two-tier at 79 leaves and 40 spines per plane.
+  - Above 8,192 GPUs, leaves and spines continue to scale proportionally between the published 10,240/16,384/32,768-GPU three-tier anchors.
 
 ## Development workflow
 Treat `main/index.html` as the source of truth. Commit meaningful changes with descriptive messages so future development can resume from GitHub without relying on chat history.

@@ -450,6 +450,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
   QDD-400G-DR4-S= on N9K-C9332D-GX2B / N9K-C9364D-GX2A;
   QSFP-200G-SR4-S= on N9K-C9332D-GX2B;
   QSFP-40G-SR4-S= on N9K-C93108TC-FX3 / N9K-C9332C for OOB leaf-spine links.
+  <b>NVIDIA proportional scaling:</b> v74 treats the published 512/1,024/8,192/10,240/16,384/32,768-GPU designs as validation anchors rather than hard SU buckets. Shared fabrics interpolate leaf and spine counts from actual GPU-port demand while preserving the documented anchor results and 8,192-GPU two-tier boundary.<br>
   <b>NVIDIA 8K two-tier anchor:</b> v73 explicitly regression-checks the supplied Cisco B300/ConnectX-8 dual-plane reference architecture at 5,040 and 8,192 GPUs without superspine.<br>
   <b>AMD large-scale validation:</b> v71 removes the NVIDIA-specific architecture-review wording from MI355X results. Designs beyond the modeled 2-tier boundary now call for Cisco/AMD/OEM validation while keeping the capacity guardrail intact.<br>
   <b>Regression baseline:</b> v70 adds automated coverage for the AMD Cisco Silicon One preset, Spectrum-X-free guidance, and the GB300 OOB guardrail while retaining the v69 sizing behavior.<br>
@@ -480,7 +481,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
   <b>Management CCW ordering:</b> C225/C220 M8 management servers are modeled beneath <b>UCS-M8-MLB</b>; the server PID is a configurator child, not a standalone flat CCW line. The XLSX exports the MLB and includes the child PID/quantity in Notes.<br>
   <b>Power-budget scenario:</b> the sizer can derive compute node/rack-scale-unit count from a user-entered total compute power budget using max or nominal per-unit power and full-SU alignment; network, storage, and management power remain separate facility overhead.<br>
   <b>NVL72 rack planning:</b> GB300 NVL72 is modeled as a fixed 48U rack-scale system at 140 kW nominal / 142 kW max; 1 NVL72 always consumes 1 dedicated physical rack and is never co-packed. Vera Rubin NVL72 also uses the fixed 1-system/1-rack rule, with power/weight still TBD.<br>
-  <b>Cisco B300/CX8 scale math:</b> shared-fabric SU sizing uses rounded/cabled SU capacity; custom SU size now supports 1 compute unit for NVL72/rack-scale designs and automatically activates custom SU enforcement. Leaf count scales linearly at 64 GPU links/leaf; published power-of-two rows are validation anchors, not mandatory leaf-count buckets. The 9-SU / 576-node / 4,608-GPU golden case validates at 72 leaves + 64 spines per plane. Supplied RA samples keep the dual-plane 400G backend at 1:1 through 8,192 GPUs (128 leaves / 64 spines per plane); above 8,192 GPUs the app uses 512-GPU pods with 8 leaves + 8 spines per plane and a 1:1 superspine tier, matching the 10K/16K/32K sample progression.<br>
+  <b>Cisco B300/CX8 scale math:</b> user-selected compute-unit enforcement may still round deployed servers, but the published 512-GPU SU is only a network reference point and does not force shared-fabric switch counts into whole-SU buckets. Leaves scale at 64 GPU links/leaf; two-tier spines scale at one per two leaves. The 576-node / 4,608-GPU off-anchor case therefore uses 72 leaves + 36 spines per plane. Supplied designs keep the dual-plane 400G backend at 1:1 through 8,192 GPUs (128 leaves / 64 spines per plane); above 8,192 GPUs, shared-fabric leaves and spines interpolate between the documented 10K/16K/32K three-tier anchors.<br>
   Transceiver BOM and CCW PIDs use Cisco spare ordering format with a trailing '=' where applicable, including ConnectX-8 Cisco host-side optics; NVIDIA validation base P/Ns are normalized for validation checks. ConnectX-7: Single Port / Single Plane uses QDD-400G-SR8=; Single Port / Dual Plane uses one QDD-400G-SR8= with 2×200G fanout; Dual Port / Dual Plane models two QSFP-200G-SR4-S= host optics. ConnectX-8: Single Port / Single Plane uses one active 400G link from the 800G-class host interface; Single Port / Dual Plane uses a single 800G OSFP cage configured as 2×400G; Dual Port / Dual Plane models two physical 400G ports and requires validation of the exact qualified host optic PID.
 </div>
 
@@ -1266,15 +1267,10 @@ function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
       // Cisco 2-tier CX8 dual-plane sizing:
       // each leaf supports 64 populated 400G host links (32 x 800G cages) and
       // reserves 64 x 400G of uplink bandwidth (32 x 800G cages) for 1:1.
-      // IMPORTANT: leaf count scales linearly; published power-of-two rows are
-      // validation anchors, not mandatory leaf-count buckets.
+      // Published rows are validation anchors, not mandatory SU or switch-count buckets.
+      // Scale both tiers from actual port demand while preserving 1:1 bandwidth.
       leaves=Math.max(4,Math.ceil(gpus/64));
-
-      // Keep the spine set symmetric/radix-safe. Published anchors are 2/4/8/.../64
-      // spines per plane. Intermediate leaf populations use the next supported
-      // power-of-two spine set, while leaf count itself is NOT rounded up.
-      const minSpines=Math.max(2,Math.ceil(leaves/2));
-      spines=Math.min(64,2**Math.ceil(Math.log2(minSpines)));
+      spines=Math.max(2,Math.ceil(leaves/2));
 
       hl=dist(linksPerPlane,leaves);
       hc=hl.map(x=>Math.ceil(x/2)); // 2x400G host links per 800G switch cage
@@ -1287,11 +1283,11 @@ function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
       atTwoTierBoundary=gpus===8192 || leaves===128;
       exceedsTwoTier=false;
     }else{
-      // Cisco 3-tier RA above 8,192 GPUs:
-      // each 512-GPU SU/pod = 8 leaves + 8 spines per plane.
-      raScaleUnits=Math.ceil(gpus/512);
-      leaves=raScaleUnits*8;
-      spines=raScaleUnits*8;
+      // Cisco 3-tier RA above 8,192 GPUs. A 512-GPU pod is the published reference
+      // building block, not a hard rounding bucket for a shared fabric.
+      raScaleUnits=gpus/512;
+      leaves=Math.ceil(gpus/64);
+      spines=leaves;
 
       hl=dist(linksPerPlane,leaves);
       hc=hl.map(x=>Math.ceil(x/2));
@@ -1393,7 +1389,7 @@ function runBackendRegressionSuite(){
       `${su563.suCount} SUs · ${su563.deployedNodes} fabric-cabled nodes`);
   const b563su=backendDesign(su563.deployedNodes,'dual400','rail',8,null);
   add('SU rounding · 563-node request backend switch count',
-      (b563su.totalLeaves+b563su.totalSpines)===272,
+      (b563su.totalLeaves+b563su.totalSpines)===216,
       `${b563su.totalLeaves} leaves + ${b563su.totalSpines} spines = ${b563su.totalLeaves+b563su.totalSpines}`);
 
   function checkCase(name,nodes,mode,topology,gpusPerNode,profile,expected=null){
@@ -1461,16 +1457,15 @@ function runBackendRegressionSuite(){
   ];
   anchors.forEach(x=>checkCase(`Cisco CX8 ${x.g.toLocaleString()} GPU`,x.g/8,'dual400','rail',8,null,x.e));
 
-  // Golden off-anchor case from the uploaded full-design calculator:
-  // 9 x 64-node SUs = 576 cabled nodes = 4,608 GPUs of fabric capacity.
-  // Dual-plane equivalent should be 72 leaves/plane + 64 spines/plane,
-  // 144 leaves + 128 spines total, with 4,608 host optics,
+  // Off-anchor proportional case: 576 nodes = 4,608 GPUs.
+  // Dual-plane equivalent is 72 leaves/plane + 36 spines/plane,
+  // 144 leaves + 72 spines total, with 4,608 host optics,
   // 4,608 switch-side host optics and 9,216 leaf-spine optical endpoints.
   const nineSu=checkCase('Cisco CX8 9-SU / 4,608-GPU golden',576,'dual400','rail',8,null,{
     leavesPerPlane:72,
-    spinesPerPlane:64,
+    spinesPerPlane:36,
     totalLeaves:144,
-    totalSpines:128,
+    totalSpines:72,
     totalSuperspines:0,
     hostOptics:4608,
     switchHostOptics:4608,
@@ -1483,8 +1478,8 @@ function runBackendRegressionSuite(){
       nineSu.physicalHostLinks===9216,
       `${nineSu.physicalHostLinks} logical 400G paths = 9,216 MPO-12 fibers`);
 
-  // Intermediate Cisco scales. These validate "no oversubscription" even when a published
-  // reference bucket is only partially populated.
+  // Intermediate Cisco scales validate proportional shared-fabric interpolation and
+  // non-oversubscription between the published reference points.
   [128,384,768,1536,4096,4504,4608,6144,9216,12288,20480,28672].forEach(g=>{
     const b=checkCase(`Cisco CX8 intermediate ${g.toLocaleString()} GPU`,g/8,'dual400','rail',8,null);
     if(g<=8192){
@@ -1492,6 +1487,15 @@ function runBackendRegressionSuite(){
       add(`Cisco CX8 intermediate ${g.toLocaleString()} GPU · no leaf power-of-two rounding`,
           b.leavesPerPlane===expectedLeaves,
           `${b.leavesPerPlane} leaves/plane = ceil(${g}/64), expected ${expectedLeaves}`);
+      const expectedSpines=Math.max(2,Math.ceil(expectedLeaves/2));
+      add(`Cisco CX8 intermediate ${g.toLocaleString()} GPU · proportional spine scaling`,
+          b.spinesPerPlane===expectedSpines,
+          `${b.spinesPerPlane} spines/plane = ceil(${expectedLeaves}/2), expected ${expectedSpines}`);
+    }else{
+      const expectedTierLeaves=Math.ceil(g/64);
+      add(`Cisco CX8 intermediate ${g.toLocaleString()} GPU · proportional 3-tier pod scaling`,
+          b.leavesPerPlane===expectedTierLeaves && b.spinesPerPlane===expectedTierLeaves,
+          `${b.leavesPerPlane} leaves and ${b.spinesPerPlane} spines/plane, expected ${expectedTierLeaves}`);
     }
   });
 
@@ -2178,13 +2182,13 @@ function calc(){
       `<b class="good">GB300 NVL72 dual-plane RA sizing active.</b><br>${nodes} active rack${nodes===1?'':'s'} / ${be.gpus} active GPUs · ${be.raScaleUnits} × 2-rack / 144-GPU SU · fabric capacity ${be.fabricRacks} racks / ${be.fabricGpus} GPUs · ${be.leavesPerPlane} leaves + ${be.spinesPerPlane} spines per plane. Active host optics/cables follow active GPUs; leaf/spine switching is provisioned to complete SU capacity.`;
   }else if(be.ciscoCx8DualRA && be.totalSuperspines>0){
     $('fabricScaleNote').innerHTML =
-      `<b class="good">Cisco 3-tier RA sizing active.</b><br>${be.gpus} GPUs · ${be.raScaleUnits} × 512-GPU SU/pod · ${be.leavesPerPlane} leaves + ${be.spinesPerPlane} spines + ${be.superspinesPerPlane} superspines per plane. Leaf↔spine and spine↔superspine are both modeled 1:1. ${be.linksPerLeafSpinePair400}×400G per leaf-spine pair · ${be.linksPerSpineSuperPair400}×400G per spine-superspine pair.`;
+      `<b class="good">Cisco 3-tier RA sizing active.</b><br>${be.gpus} GPUs · proportional shared-fabric scaling from the 512-GPU reference building block · ${be.leavesPerPlane} leaves + ${be.spinesPerPlane} spines + ${be.superspinesPerPlane} superspines per plane. Leaf↔spine and spine↔superspine are both modeled 1:1. ${be.linksPerLeafSpinePair400}×400G per leaf-spine pair · ${be.linksPerSpineSuperPair400}×400G per spine-superspine pair.`;
   }else if(be.ciscoCx8DualRA && atLargeScaleBoundary){
     $('fabricScaleNote').innerHTML =
       `<b class="good">At Cisco 2-tier maximum reference scale.</b><br>8,192 GPUs · 128 leaves/plane · 64 spines/plane · 1×400G per leaf-spine pair. Superspine is introduced only above this scale in the supplied Cisco B300/CX8 samples.`;
   }else if(be.ciscoCx8DualRA){
     $('fabricScaleNote').innerHTML =
-      `<b class="good">Cisco 2-tier backend appropriate.</b><br>${be.gpus} GPUs · ${be.leavesPerPlane} leaves/plane · ${be.spinesPerPlane} spines/plane · non-blocking fabric capacity. Leaf count scales linearly at 64 GPU links/leaf and is not rounded to a power-of-two bucket. Spine sets remain discrete for symmetric/radix-safe connectivity. Cisco sample progression supports this architecture through 8,192 GPUs.`;
+      `<b class="good">Cisco 2-tier backend appropriate.</b><br>${be.gpus} GPUs · ${be.leavesPerPlane} leaves/plane · ${be.spinesPerPlane} spines/plane · non-blocking fabric capacity. Leaves and spines scale from actual port demand; published GPU/SU sizes are validation anchors rather than hard rounding buckets. Cisco sample progression supports this architecture through 8,192 GPUs.`;
   }else{
     $('fabricScaleNote').innerHTML = largeScaleReview
       ? `<b class="warn">Large-scale architecture review required.</b><br>${be.leavesPerPlane} leaves/plane exceeds the generic ${TWO_TIER_LEAF_LIMIT_PER_PLANE}-leaf engineering threshold.`
@@ -2798,7 +2802,7 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
   const ciscoHostSparePidOk = !(backendHost800Pid.startsWith('OSFP') || backendHost800Pid.startsWith('OSFPR')) || backendHost800Pid.endsWith('=');
   q.push(`${ciscoHostSparePidOk?'<b class="good">PASS</b>':'<b class="bad">FAIL</b>'} Cisco host-side orderable optic PID uses spare format: ${backendHost800Pid}`);
   const regression=runBackendRegressionSuite();
-  q.push(`<br><b>Recurring backend regression suite:</b> ${regression.pass?'<span class="good">PASS</span>':'<span class="bad">FAIL</span>'} · ${regression.total-regression.failed}/${regression.total} checks passed. Tests rerun on every calculation and cover Cisco CX8 published anchors, the 9-SU / 4,608-GPU off-anchor golden case, intermediate non-power-of-two scales, CX7/CX8/CX9 NIC modes, non-oversubscription invariants, switch radix, and host/switch/leaf-spine/spine-superspine transceiver counts.`);
+  q.push(`<br><b>Recurring backend regression suite:</b> ${regression.pass?'<span class="good">PASS</span>':'<span class="bad">FAIL</span>'} · ${regression.total-regression.failed}/${regression.total} checks passed. Tests rerun on every calculation and cover Cisco CX8 published anchors, proportional off-anchor scaling, CX7/CX8/CX9 NIC modes, non-oversubscription invariants, switch radix, and host/switch/leaf-spine/spine-superspine transceiver counts.`);
   if(regression.failures.length){
     q.push(`<b class="bad">Regression failures:</b><br>`+regression.failures.slice(0,20).map(x=>`• ${x.name}: ${x.detail}`).join('<br>'));
   }
