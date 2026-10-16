@@ -59,6 +59,30 @@ test('MI355X switch and optic demand follows configured server NIC assumptions',
   assert.equal(design.hostOptics, 64);
 });
 
+test('MI355X default remains two-tier at 5,040 and 8,192 GPUs', () => {
+  const profile = {
+    nicProfile: 'amd-mi355x',
+    profileBasis: 'server',
+    portMode: 'sp_sp',
+    planes: 1,
+    hostInterfaceSpeed: 400,
+    linkSpeed: 400,
+    linksPerServer: 8,
+    physicalPortsPerServer: 8
+  };
+  const at5040 = api.backendDesign(630, 'custom', 'rail', 8, profile);
+  const at8192 = api.backendDesign(1024, 'custom', 'rail', 8, profile);
+
+  assert.equal(at5040.gpus, 5040);
+  assert.equal(at5040.leavesPerPlane, 80);
+  assert.equal(at5040.exceedsTwoTier, false);
+  assert.equal(at5040.totalSuperspines, 0);
+  assert.equal(at8192.gpus, 8192);
+  assert.equal(at8192.leavesPerPlane, 128);
+  assert.equal(at8192.exceedsTwoTier, false);
+  assert.equal(at8192.totalSuperspines, 0);
+});
+
 test('MI355X UI preset stays on Cisco Silicon One without a Spectrum-X dependency', () => {
   assert.match(
     html,
