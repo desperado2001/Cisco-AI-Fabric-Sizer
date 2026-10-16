@@ -334,13 +334,13 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
       <div><label>OOB leaf platform</label><input value="N9K-C93108TC-FX3" disabled></div>
       <div><label>OOB aggregation policy</label><select id="oobFabricMode" onchange="calc()">
         <option value="stp1g" selected>1G STP aggregation — N93108TC-FX3</option>
-        <option value="spine40g">40G spine fabric — N9332C</option>
+        <option value="spine40g">40G spine fabric — N9336C-SE1</option>
       </select></div>
       <div id="gb300OobModeWrap" style="display:none"><label>GB300 OOB SE override</label><select id="gb300OobMode" onchange="calc()">
         <option value="auto" selected>Auto — direct handoff ≤2 racks; spine-leaf required above 2</option>
         <option value="direct">Direct handoff to customer OOB/core — max 2 NVL72 racks</option>
         <option value="stp">Simple L2 / STP aggregation — max 2 NVL72 racks</option>
-        <option value="spine">Spine-leaf OOB fabric — N9332C</option>
+        <option value="spine">Spine-leaf OOB fabric — N9336C-SE1</option>
       </select></div>
       <div id="gb300OobGuardrail" class="footer-note" style="display:none;grid-column:1/-1;margin-top:-2px"><b>Guardrail:</b> 1–2 NVL72 racks may use direct handoff or simple STP aggregation. <b>More than 2 NVL72 racks requires a dedicated spine-leaf OOB design.</b></div>
       <div><label>Leaf downlinks</label><input value="48 × 1/10GBASE-T management ports" disabled></div>
@@ -449,14 +449,14 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
   QDD-400G-SR8-S= on N9K-C9332D-GX2B / N9K-C9364D-GX2A;
   QDD-400G-DR4-S= on N9K-C9332D-GX2B / N9K-C9364D-GX2A;
   QSFP-200G-SR4-S= on N9K-C9332D-GX2B;
-  QSFP-40G-SR4-S= on N9K-C93108TC-FX3 / N9K-C9332C for OOB leaf-spine links.
+  OOB spine: N9336C-SE1, 36×40/100G ports. Validate QSFP-40G-SR4-S= interoperability on SE1 in current Cisco TMG before ordering.
   <b>NVIDIA proportional scaling:</b> v74 treats the published 512/1,024/8,192/10,240/16,384/32,768-GPU designs as validation anchors rather than hard SU buckets. Shared fabrics interpolate leaf and spine counts from actual GPU-port demand while preserving the documented anchor results and 8,192-GPU two-tier boundary.<br>
   <b>NVIDIA 8K two-tier anchor:</b> v73 explicitly regression-checks the supplied Cisco B300/ConnectX-8 dual-plane reference architecture at 5,040 and 8,192 GPUs without superspine.<br>
   <b>AMD large-scale validation:</b> v71 removes the NVIDIA-specific architecture-review wording from MI355X results. Designs beyond the modeled 2-tier boundary now call for Cisco/AMD/OEM validation while keeping the capacity guardrail intact.<br>
   <b>Regression baseline:</b> v70 adds automated coverage for the AMD Cisco Silicon One preset, Spectrum-X-free guidance, and the GB300 OOB guardrail while retaining the v69 sizing behavior.<br>
   <b>AMD MI355X:</b> v69 models MI355X as an 8-GPU server on the shared server-sizing engine. The backend defaults to Cisco N9364E-SG2X-O Silicon One and 8×400G RoCE/server, while NIC count, active link speed and plane count are configurable; BOM, topology and validation follow those server-level assumptions. Spectrum-X is not required, and exact OEM NIC/optic/server physical data remains validation-required.<br>
   <b>GB300 OOB guardrail:</b> v67 enforces a dedicated spine-leaf OOB design whenever the deployment exceeds 2 NVL72 racks. Direct handoff and simple STP remain available only for 1–2 racks; if an SE selects either at >2 racks, the effective topology is automatically forced to spine-leaf and the UI/QA explains the override.<br>
-  <b>GB300 OOB SE override:</b> v66 adds an explicit GB300 OOB design selector. The SE can choose Auto, direct customer-core handoff, simple N93108TC-FX3 Layer-2/STP aggregation, or an N9332C spine-leaf OOB design. BOM, topology, facilities, KPI and validation follow the selected mode.<br>
+  <b>GB300 OOB SE override:</b> v66 adds an explicit GB300 OOB design selector. The SE can choose Auto, direct customer-core handoff, simple N93108TC-FX3 Layer-2/STP aggregation, or an N9336C-SE1 spine-leaf OOB design. BOM, topology, facilities, KPI and validation follow the selected mode.<br>
   <b>GB300 OOB simplification:</b> v65 removes mandatory N9336C-SE1 aggregation at 1–2 racks. Small deployments use the two in-rack N93108TC-FX3 switches per NVL72 and hand off directly to the customer OOB/management core. From 3 racks upward the app adds only a simple redundant N9336C-SE1 aggregation pair, not a separate spine-leaf OOB fabric.<br>
   <b>GB300 OOB correction:</b> v64 restores OOB as a physically separate fabric. Rack N93108TC-FX3 ToRs now uplink to dedicated N9336C-SE1 OOB aggregation switches; the in-band N9364E North-South fabric no longer carries or terminates OOB links. The BOM, facility rows, KPI and topology view are updated consistently.<br>
   <b>GB300 topology:</b> v63 replaces the generic Secure AI Factory topology with a dedicated GB300 NVL72 view: CX-8 dual-plane East-West, BF3 North-South into the converged N9364E tier, rack OOB ToRs into the same converged spine tier, VAST leaves/EBoxes, dedicated management leaves, Nexus Dashboard, and shared low-speed OOB are shown as separate paths.<br>
@@ -688,7 +688,6 @@ const PHYSICAL={
     "N9K-C9364D-GX2A":{name:"Cisco N9K-C9364D-GX2A",ru:2,powerMaxW:3124,powerTypicalW:670,weightNetLb:70.6,weightGrossLb:null,source:"Secure AI Factory deck"},
     "N9K-C9332D-GX2B":{name:"Cisco N9K-C9332D-GX2B",ru:1,powerMaxW:1442,powerTypicalW:630,weightNetLb:34.84,weightGrossLb:null,source:"Secure AI Factory deck"},
     "N9K-C93108TC-FX3":{name:"Cisco N9K-C93108TC-FX3",ru:1,powerMaxW:464,powerTypicalW:null,weightNetLb:20,weightGrossLb:null,source:"Secure AI Factory deck"},
-    "N9K-C9332C":{name:"Cisco N9K-C9332C",ru:1,powerMaxW:700,powerTypicalW:296,weightNetLb:25.1,weightGrossLb:null,source:"Cisco N9332C/N9364C datasheet"},
     "N9336C-SE1":{name:"Cisco N9336C-SE1",ru:1,powerMaxW:450,powerTypicalW:320,weightNetLb:0,weightGrossLb:null,source:"Cisco N9300-SE1 datasheet; power 320W typical / 450W maximum; installed weight not loaded"}
   },
   management:{
@@ -1158,7 +1157,7 @@ function gb300OobDesign(activeRacks,storageServers=0,managementServers=0,ndNodes
   }else{
     // Dedicated spine-leaf OOB, required beyond two NVL72 racks.
     oobSpines=2;
-    aggregationPid='N9K-C9332C';
+    aggregationPid='N9336C-SE1';
     aggregationLabel='Spine-leaf OOB fabric';
     rackUplinkSpeedG=100;
     rackSideOpticPid='QSFP-100G-DR-S=';
@@ -1185,6 +1184,7 @@ function gb300OobDesign(activeRacks,storageServers=0,managementServers=0,ndNodes
     storageServerEndpoints,managementServerEndpoints,ndEndpoints,switchMgmtEndpoints,
     externalLowSpeedEndpoints,lowSpeedLeaves,lowSpeedUplinkLinks,
     oobSpines,stpCapacityExceeded,stpUsable100gPortsPerPair,
+    spineCapacityExceeded:selectedMode==='spine' && rackTor100gLinks+lowSpeedUplinkLinks>oobSpines*36,
     simpleOob:selectedMode!=='spine'
   };
 }
@@ -1206,7 +1206,6 @@ const TMG_QUALIFIED = {
   'N9K-C9332D-GX2B': new Set(['QDD-400G-SR8-S','QDD-400G-DR4-S','QSFP-200G-SR4-S']),
   'N9K-C9364D-GX2A': new Set(['QDD-400G-SR8-S','QDD-400G-DR4-S']),
   'N9K-C93108TC-FX3': new Set(['QSFP-40G-SR4-S']),
-  'N9K-C9332C': new Set(['QSFP-40G-SR4-S']),
   'N9336C-SE1': new Set(['QSFP-100G-DR-S'])
 };
 function normalizeOpticPid(pid){return String(pid||'').replace(/=$/,'')}
@@ -1656,7 +1655,7 @@ function gb300TopologyVisual(ctx){
           : gb300Oob?.selectedMode==='stp'
             ? box(760,470,360,64,`${gb300Oob.aggregationSwitches} × N93108TC-FX3 STP Aggregation`,
                 `${gb300Oob.rackTor100gLinks} rack-ToR uplinks · simple L2/STP redundant pair`,'#94a3b8','#111827',10)
-            : box(760,470,360,64,`${gb300Oob.oobSpines} × N9332C OOB Spines`,
+            : box(760,470,360,64,`${gb300Oob.oobSpines} × N9336C-SE1 OOB Spines`,
                 `${gb300Oob.rackTor100gLinks} rack-management uplinks · spine-leaf OOB design`,'#94a3b8','#111827',10)}
          ${box(760,565,360,60,`${gb300Oob?.lowSpeedLeaves||2} × N93108TC-FX3 Low-Speed OOB Leaves`,
           `${gb300Oob?.externalLowSpeedEndpoints||0} BMC / host-mgmt / switch-mgmt endpoints`,'#94a3b8','#111827',10)}
@@ -1902,7 +1901,7 @@ function topologyVisual(ctx){
     svg += box(430,oobY,340,42,`${oobLeaves} × OOB Leafs`,`${oobEndpoints} endpoints · dual 1G copper uplinks · STP redundant path`,'#94a3b8','#111827',10);
     svg += `<path d="M 600 ${oobY-10} L 600 ${oobY}" fill="none" stroke="#64748b" stroke-width="1.8"/>`;
   }else if(oobSpines>0){
-    svg += box(430,oobY-48,340,38,`${oobSpines} × OOB Spines`, 'N9K-C9332C · 40G leaf-spine','#94a3b8','#111827',10);
+    svg += box(430,oobY-48,340,38,`${oobSpines} × OOB Spines`, 'N9336C-SE1 · 40G leaf-spine','#94a3b8','#111827',10);
     svg += box(430,oobY,340,42,`${oobLeaves} × OOB Leafs`,`${oobEndpoints} endpoints · N93108TC-FX3 · dual 40G uplinks`,'#94a3b8','#111827',10);
     svg += `<path d="M 600 ${oobY-10} L 600 ${oobY}" fill="none" stroke="#64748b" stroke-width="1.8"/>`;
   }else{
@@ -2142,12 +2141,12 @@ function calc(){
   const oobFabricMode=$('oobFabricMode')?.value||'stp1g';
   // Small OOB remains a flat redundant leaf pair. Above two leaves the user can choose:
   // 1) simple L2 1GBASE-T STP aggregation using the same N93108TC-FX3 platform, or
-  // 2) the original 40G N9332C spine design.
+  // 2) the original 40G N9336C-SE1 spine design.
   const stpLeavesPerAggPair=47; // 48 copper ports less one inter-aggregator STP link
   const oobAggPairs=oobEnabled&&oobLeaves>2&&oobFabricMode==='stp1g'?Math.ceil(oobLeaves/stpLeavesPerAggPair):0;
   const oobAggregators=oobAggPairs*2;
   const oobSpines=oobEnabled&&oobLeaves>2&&oobFabricMode==='spine40g'?2:0;
-  const oobSpineCapacityExceeded=oobEnabled&&oobFabricMode==='spine40g'&&oobLeaves>32;
+  const oobSpineCapacityExceeded=oobEnabled&&oobFabricMode==='spine40g'&&oobLeaves>36;
   const oobLeafSpineLinks=oobSpines?oobLeaves*2:0;
   const oobLeafSpineOptics=oobLeafSpineLinks*2;
   const oobStpLeafLinks=oobAggregators?oobLeaves*2:0;
@@ -2159,7 +2158,7 @@ function calc(){
     : `Compute ${nodes} · Mgmt/Control ${mgmt} · Backend Leafs ${backendLeafOob} · Backend Spines ${backendSpineOob}${frontendEnabled?` · Frontend Leafs ${frontendLeafOob} · Frontend Spines ${frontendSpineOob}`:''}${vastEnabled?` · Storage Leafs ${storageLeafOob}${storageSpineOob?` · Storage Spines ${storageSpineOob}`:''} · VAST ${eq*2}`:''}${ndNodeCount?` · Nexus Dashboard ${ndNodeCount}`:''}`;
   const oobModeSummary=oobFabricMode==='stp1g'
     ? (oobAggregators?`${oobAggregators} × N93108TC-FX3 aggregators · ${oobStpLeafLinks} leaf uplinks + ${oobStpPeerLinks} inter-aggregator STP link${oobStpPeerLinks===1?'':'s'} · 1GBASE-T copper · no optics`:'flat redundant pair')
-    : (oobSpines?`${oobSpines} × N9332C spines · ${oobLeafSpineLinks} × 40G links · ${oobLeafSpineOptics} × QSFP-40G-SR4-S=`:'flat redundant pair');
+    : (oobSpines?`${oobSpines} × N9336C-SE1 spines · ${oobLeafSpineLinks} × 40G links · ${oobLeafSpineOptics} × QSFP-40G-SR4-S=`:'flat redundant pair');
   if($('oobPolicyNote')){
     if(platform==='gb300-nvl72'){
       const forced=gb300Oob.guardrailForced
@@ -2169,12 +2168,12 @@ function calc(){
         ? `Direct OOB/core handoff selected. The ${gb300Oob.inRackMgmtSwitches} in-rack N93108TC-FX3 switches uplink directly to the customer's OOB/core; no extra Cisco OOB aggregation switches are added.`
         : gb300Oob.selectedMode==='stp'
           ? `Simple Layer-2/STP aggregation selected. Add a redundant <b>N93108TC-FX3</b> aggregation pair. This option is allowed only for up to 2 NVL72 racks.`
-          : `Spine-leaf OOB selected. Rack-management uplinks are modeled into a redundant <b>N9332C</b> spine pair using 100G uplinks.`;
+          : `Spine-leaf OOB selected. Rack-management uplinks are modeled into a redundant <b>N9336C-SE1</b> spine pair using 100G uplinks.`;
       $('oobPolicyNote').innerHTML=`<b>GB300 SE override:</b> ${forced}${modeText}`;
     }else{
       $('oobPolicyNote').innerHTML=oobFabricMode==='stp1g'
         ? `Simple Layer-2 OOB selected: native <b>1GBASE-T copper</b> from N93108TC-FX3 leaves to redundant N93108TC-FX3 aggregators. STP controls the redundant path. No uplink transceivers are required; use appropriate copper patch cabling.`
-        : `High-speed OOB selected: N93108TC-FX3 leaves are dual-homed to a redundant <b>N9332C 40G spine pair</b> using QSFP-40G-SR4-S= optics.`;
+        : `High-speed OOB selected: N93108TC-FX3 leaves are dual-homed to a redundant <b>N9336C-SE1 40G spine pair</b> using QSFP-40G-SR4-S= optics.`;
     }
   }
   const theoreticalTwoTierGpuBoundary=8192;
@@ -2254,7 +2253,7 @@ function calc(){
     pRow(`N9K-C9332D-GX2B management leaves`,gb300MgmtFabric.leaves,PHYSICAL.switch["N9K-C9332D-GX2B"]);
     if(oobEnabled){
       if(gb300Oob.selectedMode==='stp')pRow(`N93108TC-FX3 OOB STP aggregation`,gb300Oob.aggregationSwitches,PHYSICAL.switch["N9K-C93108TC-FX3"]);
-      if(gb300Oob.selectedMode==='spine')pRow(`N9332C OOB spines`,gb300Oob.oobSpines,PHYSICAL.switch["N9K-C9332C"]);
+      if(gb300Oob.selectedMode==='spine')pRow(`N9336C-SE1 OOB spines`,gb300Oob.oobSpines,PHYSICAL.switch["N9336C-SE1"]);
       pRow(`N9K-C93108TC-FX3 low-speed OOB leaves`,gb300Oob.lowSpeedLeaves,PHYSICAL.switch["N9K-C93108TC-FX3"]);
     }
   }else{
@@ -2265,7 +2264,7 @@ function calc(){
   pRow(`N9K-C9332D-GX2B VAST storage leaves`,vn.switches,PHYSICAL.switch["N9K-C9332D-GX2B"]);
   pRow(`N9K-C93108TC-FX3 OOB leaves`,oobLeaves,PHYSICAL.switch["N9K-C93108TC-FX3"]);
   if(oobAggregators)pRow(`N9K-C93108TC-FX3 OOB STP aggregators`,oobAggregators,PHYSICAL.switch["N9K-C93108TC-FX3"]);
-  if(oobSpines)pRow(`N9K-C9332C OOB spines`,oobSpines,PHYSICAL.switch["N9K-C9332C"]);
+  if(oobSpines)pRow(`N9336C-SE1 OOB spines`,oobSpines,PHYSICAL.switch["N9336C-SE1"]);
   pRow(`Cisco UCS C225 M8N VAST EBox`,eq,PHYSICAL.storage["UCSC-C225M8N-EBOX"]);
   if(mgmtEnabled)physRows.push({name:mgmtServerName,qty:mgmt,powerW:mgmtServerPowerW,totalPowerW:mgmt*mgmtServerPowerW,weightLb:mgmtServerWeightLb,totalWeightLb:mgmt*mgmtServerWeightLb,source:mgmtServerModel==='c225m8s'?'Planning assumption; validate exact C225 M8S configuration':mgmtServerModel==='c220m8'?'Planning assumption; validate exact C220 M8 configuration':'User-entered planning values'});
   if(ndEnabled)pRow(`Cisco Nexus Dashboard ND-NODE-G5S`,ndNodeCount,PHYSICAL.management["ND-NODE-G5S"]);
@@ -2286,12 +2285,12 @@ function calc(){
     {name:platform==='gb300-nvl72'?'N9364E-SG2X-O converged spine':'N9K-C9364D-GX2A compute frontend spine',qty:fe.spines,ru:PHYSICAL.switch[platform==='gb300-nvl72'?'N9364E-SG2X-O':'N9K-C9364D-GX2A'].ru,powerW:swPower(PHYSICAL.switch[platform==='gb300-nvl72'?'N9364E-SG2X-O':'N9K-C9364D-GX2A']),weightLb:PHYSICAL.switch[platform==='gb300-nvl72'?'N9364E-SG2X-O':'N9K-C9364D-GX2A'].weightNetLb,role:'Network'},
     {name:'N9K-C9332D-GX2B management leaf',qty:gb300MgmtFabric.leaves,ru:PHYSICAL.switch["N9K-C9332D-GX2B"].ru,powerW:swPower(PHYSICAL.switch["N9K-C9332D-GX2B"]),weightLb:PHYSICAL.switch["N9K-C9332D-GX2B"].weightNetLb,role:'Storage & Mgmt'},
     {name:'N93108TC-FX3 OOB STP aggregation',qty:oobEnabled&&gb300Oob.selectedMode==='stp'?gb300Oob.aggregationSwitches:0,ru:PHYSICAL.switch["N9K-C93108TC-FX3"].ru,powerW:swPower(PHYSICAL.switch["N9K-C93108TC-FX3"]),weightLb:PHYSICAL.switch["N9K-C93108TC-FX3"].weightNetLb,role:'Storage & Mgmt'},
-    {name:'N9332C OOB spine',qty:oobEnabled&&gb300Oob.selectedMode==='spine'?gb300Oob.oobSpines:0,ru:PHYSICAL.switch["N9K-C9332C"].ru,powerW:swPower(PHYSICAL.switch["N9K-C9332C"]),weightLb:PHYSICAL.switch["N9K-C9332C"].weightNetLb,role:'Storage & Mgmt'},
+    {name:'N9336C-SE1 OOB spine',qty:oobEnabled&&gb300Oob.selectedMode==='spine'?gb300Oob.oobSpines:0,ru:PHYSICAL.switch["N9336C-SE1"].ru,powerW:swPower(PHYSICAL.switch["N9336C-SE1"]),weightLb:PHYSICAL.switch["N9336C-SE1"].weightNetLb,role:'Storage & Mgmt'},
     {name:'N9K-C93108TC-FX3 low-speed OOB leaf',qty:oobEnabled?gb300Oob.lowSpeedLeaves:0,ru:PHYSICAL.switch["N9K-C93108TC-FX3"].ru,powerW:swPower(PHYSICAL.switch["N9K-C93108TC-FX3"]),weightLb:PHYSICAL.switch["N9K-C93108TC-FX3"].weightNetLb,role:'Storage & Mgmt'},
     {name:'N9K-C9332D-GX2B VAST storage leaf',qty:vn.switches,ru:PHYSICAL.switch["N9K-C9332D-GX2B"].ru,powerW:swPower(PHYSICAL.switch["N9K-C9332D-GX2B"]),weightLb:PHYSICAL.switch["N9K-C9332D-GX2B"].weightNetLb,role:'Storage & Mgmt'},
     {name:'N9K-C93108TC-FX3 OOB leaf',qty:oobLeaves,ru:PHYSICAL.switch["N9K-C93108TC-FX3"].ru,powerW:swPower(PHYSICAL.switch["N9K-C93108TC-FX3"]),weightLb:PHYSICAL.switch["N9K-C93108TC-FX3"].weightNetLb,role:'Storage & Mgmt'},
     {name:'N9K-C93108TC-FX3 OOB STP aggregator',qty:oobAggregators,ru:PHYSICAL.switch["N9K-C93108TC-FX3"].ru,powerW:swPower(PHYSICAL.switch["N9K-C93108TC-FX3"]),weightLb:PHYSICAL.switch["N9K-C93108TC-FX3"].weightNetLb,role:'Storage & Mgmt'},
-    {name:'N9K-C9332C OOB spine',qty:oobSpines,ru:PHYSICAL.switch["N9K-C9332C"].ru,powerW:swPower(PHYSICAL.switch["N9K-C9332C"]),weightLb:PHYSICAL.switch["N9K-C9332C"].weightNetLb,role:'Storage & Mgmt'},
+    {name:'N9336C-SE1 OOB spine',qty:oobSpines,ru:PHYSICAL.switch["N9336C-SE1"].ru,powerW:swPower(PHYSICAL.switch["N9336C-SE1"]),weightLb:PHYSICAL.switch["N9336C-SE1"].weightNetLb,role:'Storage & Mgmt'},
     {name:'Cisco UCS C225 M8N VAST EBox',qty:eq,ru:PHYSICAL.storage["UCSC-C225M8N-EBOX"].ru,powerW:PHYSICAL.storage["UCSC-C225M8N-EBOX"].powerMaxW,weightLb:PHYSICAL.storage["UCSC-C225M8N-EBOX"].weightNetLb,role:'Storage & Mgmt'},
     {name:mgmtServerName,qty:mgmt,ru:mgmtServerRu,powerW:mgmtServerPowerW,weightLb:mgmtServerWeightLb,role:'Management'}
   ].filter(x=>x.qty>0);
@@ -2588,7 +2587,7 @@ function calc(){
           `${gb300Oob.rackTor100gLinks} rack-ToR uplinks into a redundant pair; STP controls the redundant path${gb300Oob.stpCapacityExceeded?' · PORT CAPACITY REVIEW REQUIRED':''}`,
           'SE-selected simple OOB aggregation');
       }else{
-        add('GB300 OOB Spine','N9K-C9332C','100G OOB spine switch',gb300Oob.oobSpines,
+        add('GB300 OOB Spine','N9336C-SE1','100G OOB spine switch',gb300Oob.oobSpines,
           `${gb300Oob.rackTor100gLinks} rack-management uplinks into a redundant spine pair`,
           gb300Oob.guardrailForced?'GB300 OOB guardrail: spine-leaf required above 2 racks':'SE-selected spine-leaf OOB design');
       }
@@ -2599,7 +2598,7 @@ function calc(){
           : `${gb300Oob.aggregationLinks} physical links × 2 optical endpoints`,
         'SE-selected OOB topology');
 
-      add('GB300 OOB Cabling',gb300Oob.selectedMode==='spine'?'MMF-OOB-CABLE-TBD':'CB-LC-LC-SMF',
+      add('GB300 OOB Cabling','CB-LC-LC-SMF',
         `${gb300Oob.rackUplinkSpeedG}G OOB link cable`,gb300Oob.rackTorCables,
         `${gb300Oob.aggregationLinks} physical rack-management uplinks`,
         'Validate exact cable PID/reach in TMG/CCW');
@@ -2629,8 +2628,8 @@ function calc(){
       add('OOB Management Aggregator','N9K-C93108TC-FX3','48-port 1/10GBASE-T Layer-2 OOB aggregation switch',oobAggregators,`${oobLeaves} OOB leaves dual-homed with 1GBASE-T copper; ${oobAggPairs} redundant aggregation pair(s); STP provides loop control; one peer link reserved per pair`,'Simple OOB Layer-2 planning; native copper ports, no optical transceivers required');
     }
     if(oobSpines){
-      add('OOB Management Spine','N9K-C9332C','32-port 40/100G QSFP28 OOB aggregation spine',oobSpines,`${oobLeaves} OOB leaves dual-homed to redundant spine pair; max 32 leaves per spine pair`,'Cisco N9332C datasheet + scalable OOB planning');
-      add('OOB Management Optics','QSFP-40G-SR4-S=','40GBASE-SR4-S QSFP+ MMF optic',oobLeafSpineOptics,`${oobLeafSpineLinks} physical 40G links × 2 endpoints`,tmgQualified('N9K-C93108TC-FX3','QSFP-40G-SR4-S=')&&tmgQualified('N9K-C9332C','QSFP-40G-SR4-S=')?'TMG qualified on OOB leaf and spine':'TMG validation required');
+      add('OOB Management Spine','N9336C-SE1','36-port 40/100G QSFP28 OOB aggregation spine',oobSpines,`${oobLeaves} OOB leaves dual-homed to redundant spine pair; max 36 leaves per spine pair`,'Cisco N9336C-SE1 datasheet + scalable OOB planning');
+      add('OOB Management Optics','QSFP-40G-SR4-S=','40GBASE-SR4-S QSFP+ MMF optic',oobLeafSpineOptics,`${oobLeafSpineLinks} physical 40G links × 2 endpoints`,tmgQualified('N9K-C93108TC-FX3','QSFP-40G-SR4-S=')&&tmgQualified('N9336C-SE1','QSFP-40G-SR4-S=')?'TMG qualified on OOB leaf and spine':'TMG validation required');
     }
   }
   if(ndEnabled){
@@ -2655,6 +2654,7 @@ function calc(){
     if(vastEnabled)q.push(`<b class="good">PASS</b> GB300 storage uplinks: ${eq} EBoxes on ${vn.switches} storage leaves; ${vn.totalUplinkLinks} × 400G storage-leaf uplinks (${vn.uplinksPerSwitch.join('/')} per leaf) toward converged spines.`);
     if(oobEnabled){
       q.push(`<b class="${gb300Oob.guardrailForced?'warn':'good'}">${gb300Oob.guardrailForced?'GUARDRAIL':'PASS'}</b> GB300 OOB remains physically separate from the in-band N9364E fabric. ${nodes>2?`More than 2 NVL72 racks requires spine-leaf OOB; effective design = <b>Spine-leaf OOB</b>${gb300Oob.guardrailForced?` (requested ${gb300Oob.overrideMode}, overridden by guardrail)`:''}.`:`SE-selected design = <b>${gb300Oob.selectedMode==='direct'?'Direct customer-core handoff':gb300Oob.selectedMode==='stp'?'Simple L2/STP aggregation':'Spine-leaf OOB'}</b>.`}`);
+      if(gb300Oob.spineCapacityExceeded)q.push(`<b class="warn">CAPACITY REVIEW</b> GB300 OOB rack and low-speed leaf uplinks exceed the 72 ports available across the N9336C-SE1 spine pair. Add aggregation blocks or select a higher-density design.`);
       q.push(`<b class="good">PASS</b> Rack-ToR OOB: ${gb300Oob.rackTor100gLinks} physical uplinks. ${nodes>2?`Dedicated OOB spine-leaf is enforced at this scale.`:`Direct/STP/spine-leaf are permitted within the 1–2 rack guardrail.`}`);
       q.push(`<b class="good">PASS</b> Per-server low-speed OOB planning: storage ${gb300Oob.storageServerEndpoints} ports + management/control ${gb300Oob.managementServerEndpoints} ports; ${gb300Oob.lowSpeedLeaves} shared low-speed OOB leaves.`);
     }
@@ -2720,9 +2720,9 @@ function calc(){
   q.push(`<b class="good">PASS</b> TMG: QSFP-200G-SR4-S= is qualified on N9K-C9332D-GX2B; validate the exact server/EBox adapter side.`);
   q.push(`<b class="good">PASS</b> TMG: QDD-400G-DR4-S= is qualified on N9K-C9364D-GX2A and N9K-C9332D-GX2B.`);
   q.push(`<b class="warn">CHECK</b> Fiber/cable assemblies and exact host-side adapters still require configuration-specific TMG/orderability validation.`);
-  if(oobEnabled)q.push(`<b class="${oobSpineCapacityExceeded?'bad':'good'}">${oobSpineCapacityExceeded?'REVIEW':'PASS'}</b> OOB fabric sizing: ${oobLeaves} × N93108TC-FX3 leaf switch${oobLeaves===1?'':'es'}${oobSpines?` + ${oobSpines} × N9332C spines`:' as a flat redundant pair'} for ${oobEndpoints} management endpoints.`);
-  if(oobEnabled&&oobSpines)q.push(`<b class="good">PASS</b> OOB leaf-spine optics: ${oobLeafSpineOptics} × QSFP-40G-SR4-S= for ${oobLeafSpineLinks} dual-homed 40G links; TMG qualified on the selected OOB leaf/spine platforms.`);
-  if(oobEnabled&&oobSpineCapacityExceeded)q.push(`<b class="warn">ARCHITECTURE REVIEW</b> ${oobLeaves} OOB leaves exceeds one N9332C spine pair's 32-port leaf-facing capacity. Split the OOB fabric into additional aggregation blocks or select a higher-density spine.`);
+  if(oobEnabled)q.push(`<b class="${oobSpineCapacityExceeded?'bad':'good'}">${oobSpineCapacityExceeded?'REVIEW':'PASS'}</b> OOB fabric sizing: ${oobLeaves} × N93108TC-FX3 leaf switch${oobLeaves===1?'':'es'}${oobSpines?` + ${oobSpines} × N9336C-SE1 spines`:' as a flat redundant pair'} for ${oobEndpoints} management endpoints.`);
+  if(oobEnabled&&oobSpines)q.push(`<b class="warn">CHECK</b> OOB leaf-spine optics: ${oobLeafSpineOptics} × QSFP-40G-SR4-S= for ${oobLeafSpineLinks} dual-homed 40G links. Validate SE1 optic support in current Cisco TMG.`);
+  if(oobEnabled&&oobSpineCapacityExceeded)q.push(`<b class="warn">ARCHITECTURE REVIEW</b> ${oobLeaves} OOB leaves exceeds one N9336C-SE1 spine pair's 36-port leaf-facing capacity. Split the OOB fabric into additional aggregation blocks or select a higher-density spine.`);
   else if(oobEnabled&&oobSpines)q.push(`<b class="warn">CHECK</b> OOB 2-tier topology is a scalable planning model; validate final VLAN/routing/redundancy policy against the customer's management-network standard.`);
 
     if(!isCustom && mode==='dual400' && top==='rail' && nodes===16 && be.leavesPerPlane===4 && be.spinesPerPlane===2)

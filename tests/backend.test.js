@@ -60,6 +60,15 @@ test('GB300 OOB choices enforce the guardrail across deployment scales', () => {
   }
 });
 
+test('OOB spine uses SE1 and flags its GB300 port capacity', () => {
+  const within=api.gb300OobDesign(17,0,0,0,0,'spine');
+  const beyond=api.gb300OobDesign(18,0,0,0,0,'spine');
+  assert.equal(within.aggregationPid,'N9336C-SE1');
+  assert.equal(within.spineCapacityExceeded,false);
+  assert.equal(beyond.spineCapacityExceeded,true);
+  assert.equal(html.includes('N9K-C9332C'),false);
+});
+
 test('MI355X default uses eight 400G server NICs without NVIDIA-specific geometry', () => {
   const profile = {
     nicProfile: 'amd-mi355x',
