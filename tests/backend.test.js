@@ -10,13 +10,21 @@ const end = html.indexOf('function frontendDesign');
 assert.ok(start >= 0 && end > start, 'backend sizing functions must remain discoverable in index.html');
 
 const api = new Function(
-  `${html.slice(start, end)}; return { backendDesign, gb300EastWestDesign, gb300OobDesign, runBackendRegressionSuite };`
+  `${html.slice(start, end)}; return { backendDesign, gb300EastWestDesign, gb300OobDesign, runBackendRegressionSuite, tmgQualified };`
 )();
 
 test('embedded backend regression suite passes', () => {
   const result = api.runBackendRegressionSuite();
   assert.equal(result.pass, true, JSON.stringify(result.failures, null, 2));
   assert.equal(result.failed, 0);
+});
+
+test('SE1 accepts supplied TMG-qualified OOB optics with spare PID normalization', () => {
+  for(const pid of ['QSFP-40G-SR4-S','QSFP-100G-DR-S']) {
+    assert.equal(api.tmgQualified('N9336C-SE1',pid),true);
+    assert.equal(api.tmgQualified('N9336C-SE1',pid+'='),true);
+  }
+  assert.equal(api.tmgQualified('N9336C-SE1','UNVERIFIED-OPTIC'),false);
 });
 
 test('MI355X single-plane default conserves links, optics and switch capacity across scales', () => {

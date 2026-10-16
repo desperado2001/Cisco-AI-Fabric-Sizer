@@ -449,7 +449,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
   QDD-400G-SR8-S= on N9K-C9332D-GX2B / N9K-C9364D-GX2A;
   QDD-400G-DR4-S= on N9K-C9332D-GX2B / N9K-C9364D-GX2A;
   QSFP-200G-SR4-S= on N9K-C9332D-GX2B;
-  OOB spine: N9336C-SE1, 36×40/100G ports. Validate QSFP-40G-SR4-S= interoperability on SE1 in current Cisco TMG before ordering.
+  OOB spine: N9336C-SE1, 36×40/100G ports. QSFP-40G-SR4-S= (MPO-12 UPC / MMF) and QSFP-100G-DR-S= (duplex LC UPC / SMF) are TMG-qualified on SE1 from NX-OS 10.6(1), per the supplied Cisco TMG screenshots.
   <b>NVIDIA proportional scaling:</b> v74 treats the published 512/1,024/8,192/10,240/16,384/32,768-GPU designs as validation anchors rather than hard SU buckets. Shared fabrics interpolate leaf and spine counts from actual GPU-port demand while preserving the documented anchor results and 8,192-GPU two-tier boundary.<br>
   <b>NVIDIA 8K two-tier anchor:</b> v73 explicitly regression-checks the supplied Cisco B300/ConnectX-8 dual-plane reference architecture at 5,040 and 8,192 GPUs without superspine.<br>
   <b>AMD large-scale validation:</b> v71 removes the NVIDIA-specific architecture-review wording from MI355X results. Designs beyond the modeled 2-tier boundary now call for Cisco/AMD/OEM validation while keeping the capacity guardrail intact.<br>
@@ -1206,7 +1206,8 @@ const TMG_QUALIFIED = {
   'N9K-C9332D-GX2B': new Set(['QDD-400G-SR8-S','QDD-400G-DR4-S','QSFP-200G-SR4-S']),
   'N9K-C9364D-GX2A': new Set(['QDD-400G-SR8-S','QDD-400G-DR4-S']),
   'N9K-C93108TC-FX3': new Set(['QSFP-40G-SR4-S']),
-  'N9336C-SE1': new Set(['QSFP-100G-DR-S'])
+  // Cisco TMG screenshots supplied 2026-10-16: both optics require NX-OS 10.6(1) on SE1.
+  'N9336C-SE1': new Set(['QSFP-100G-DR-S','QSFP-40G-SR4-S'])
 };
 function normalizeOpticPid(pid){return String(pid||'').replace(/=$/,'')}
 function tmgQualified(devicePid,opticPid){
@@ -2596,7 +2597,7 @@ function calc(){
         gb300Oob.selectedMode==='direct'
           ? `${gb300Oob.rackTor100gLinks} physical links × 1 rack-side optic; far-end customer-core optics not included`
           : `${gb300Oob.aggregationLinks} physical links × 2 optical endpoints`,
-        'SE-selected OOB topology');
+        gb300Oob.selectedMode==='spine'?'N9336C-SE1 QSFP-100G-DR-S requires NX-OS 10.6(1) minimum (supplied Cisco TMG screenshots)':'SE-selected OOB topology');
 
       add('GB300 OOB Cabling','CB-LC-LC-SMF',
         `${gb300Oob.rackUplinkSpeedG}G OOB link cable`,gb300Oob.rackTorCables,
@@ -2721,7 +2722,7 @@ function calc(){
   q.push(`<b class="good">PASS</b> TMG: QDD-400G-DR4-S= is qualified on N9K-C9364D-GX2A and N9K-C9332D-GX2B.`);
   q.push(`<b class="warn">CHECK</b> Fiber/cable assemblies and exact host-side adapters still require configuration-specific TMG/orderability validation.`);
   if(oobEnabled)q.push(`<b class="${oobSpineCapacityExceeded?'bad':'good'}">${oobSpineCapacityExceeded?'REVIEW':'PASS'}</b> OOB fabric sizing: ${oobLeaves} × N93108TC-FX3 leaf switch${oobLeaves===1?'':'es'}${oobSpines?` + ${oobSpines} × N9336C-SE1 spines`:' as a flat redundant pair'} for ${oobEndpoints} management endpoints.`);
-  if(oobEnabled&&oobSpines)q.push(`<b class="warn">CHECK</b> OOB leaf-spine optics: ${oobLeafSpineOptics} × QSFP-40G-SR4-S= for ${oobLeafSpineLinks} dual-homed 40G links. Validate SE1 optic support in current Cisco TMG.`);
+  if(oobEnabled&&oobSpines)q.push(`<b class="good">PASS</b> OOB leaf-spine optics: ${oobLeafSpineOptics} × QSFP-40G-SR4-S= for ${oobLeafSpineLinks} dual-homed 40G links, using MPO-12 UPC MMF. SE1 TMG qualification requires NX-OS 10.6(1) minimum (supplied Cisco TMG screenshots).`);
   if(oobEnabled&&oobSpineCapacityExceeded)q.push(`<b class="warn">ARCHITECTURE REVIEW</b> ${oobLeaves} OOB leaves exceeds one N9336C-SE1 spine pair's 36-port leaf-facing capacity. Split the OOB fabric into additional aggregation blocks or select a higher-density spine.`);
   else if(oobEnabled&&oobSpines)q.push(`<b class="warn">CHECK</b> OOB 2-tier topology is a scalable planning model; validate final VLAN/routing/redundancy policy against the customer's management-network standard.`);
 

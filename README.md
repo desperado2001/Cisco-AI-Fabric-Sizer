@@ -4,11 +4,12 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
 
 ## Canonical application
 - `main/index.html`
-- Current baseline: v76
+- Current baseline: v77
 
 ## Current design decisions
 - NVIDIA GB300 NVL72 OOB:
-  - OOB spine is N9336C-SE1 (36×40/100G), replacing end-of-sale N9K-C9332C. Facilities use 320W typical / 450W maximum; installed weight remains unspecified. Verify selected optics in current Cisco TMG.
+  - OOB spine is N9336C-SE1 (36×40/100G), replacing end-of-sale N9K-C9332C. Facilities use 320W typical / 450W maximum; installed weight remains unspecified.
+  - Supplied Cisco TMG screenshots (2026-10-16) confirm QSFP-40G-SR4-S (40G, MPO-12 UPC MMF, up to 150 m) and QSFP-100G-DR-S (100G, duplex LC UPC SMF, 500 m) on N9336C-SE1 from NX-OS 10.6(1). BOM spare-ordering PIDs append `=`.
   - 1–2 racks may use direct handoff, simple STP aggregation, or spine-leaf OOB.
   - More than 2 NVL72 racks requires spine-leaf OOB.
 - AMD MI355X / 8-GPU server profile:
