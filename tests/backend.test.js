@@ -10,7 +10,7 @@ const end = html.indexOf('function frontendDesign');
 assert.ok(start >= 0 && end > start, 'backend sizing functions must remain discoverable in index.html');
 
 const api = new Function(
-  `${html.slice(start, end)}; return { backendDesign, gb300EastWestDesign, runBackendRegressionSuite };`
+  `${html.slice(start, end)}; return { backendDesign, gb300EastWestDesign, gb300OobDesign, runBackendRegressionSuite };`
 )();
 
 test('embedded backend regression suite passes', () => {
@@ -59,6 +59,19 @@ test('MI355X switch and optic demand follows configured server NIC assumptions',
   assert.equal(design.hostOptics, 64);
 });
 
+test('MI355X UI preset stays on Cisco Silicon One without a Spectrum-X dependency', () => {
+  assert.match(
+    html,
+    /if\(isAmdMi355x\)[\s\S]*?backendSwitch'\)\.value='N9364E-SG2X-O'/,
+    'MI355X platform selection must preset N9364E-SG2X-O'
+  );
+  assert.match(
+    html,
+    /AMD default:[\s\S]*?Spectrum-X is not required\./,
+    'MI355X guidance must remain independent of Spectrum-X'
+  );
+});
+
 test('GB300 NVL72 sizing anchor remains unchanged', () => {
   const design = api.gb300EastWestDesign(2);
 
@@ -80,4 +93,19 @@ test('GB300 NVL72 sizing anchor remains unchanged', () => {
       fabricRacks: 2
     }
   );
+});
+
+test('GB300 OOB guardrail preserves small-rack choices and forces spine-leaf above two racks', () => {
+  const direct = api.gb300OobDesign(2, 0, 0, 0, 0, 'direct');
+  const stp = api.gb300OobDesign(2, 0, 0, 0, 0, 'stp');
+  const forced = api.gb300OobDesign(3, 0, 0, 0, 0, 'direct');
+
+  assert.equal(direct.selectedMode, 'direct');
+  assert.equal(direct.guardrailForced, false);
+  assert.equal(stp.selectedMode, 'stp');
+  assert.equal(stp.guardrailForced, false);
+  assert.equal(forced.selectedMode, 'spine');
+  assert.equal(forced.guardrailForced, true);
+  assert.equal(forced.oobSpines, 2);
+  assert.equal(forced.simpleOob, false);
 });

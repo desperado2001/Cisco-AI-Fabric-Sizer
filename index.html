@@ -450,6 +450,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
   QDD-400G-DR4-S= on N9K-C9332D-GX2B / N9K-C9364D-GX2A;
   QSFP-200G-SR4-S= on N9K-C9332D-GX2B;
   QSFP-40G-SR4-S= on N9K-C93108TC-FX3 / N9K-C9332C for OOB leaf-spine links.
+  <b>Regression baseline:</b> v70 adds automated coverage for the AMD Cisco Silicon One preset, Spectrum-X-free guidance, and the GB300 OOB guardrail while retaining the v69 sizing behavior.<br>
   <b>AMD MI355X:</b> v69 models MI355X as an 8-GPU server on the shared server-sizing engine. The backend defaults to Cisco N9364E-SG2X-O Silicon One and 8×400G RoCE/server, while NIC count, active link speed and plane count are configurable; BOM, topology and validation follow those server-level assumptions. Spectrum-X is not required, and exact OEM NIC/optic/server physical data remains validation-required.<br>
   <b>GB300 OOB guardrail:</b> v67 enforces a dedicated spine-leaf OOB design whenever the deployment exceeds 2 NVL72 racks. Direct handoff and simple STP remain available only for 1–2 racks; if an SE selects either at >2 racks, the effective topology is automatically forced to spine-leaf and the UI/QA explains the override.<br>
   <b>GB300 OOB SE override:</b> v66 adds an explicit GB300 OOB design selector. The SE can choose Auto, direct customer-core handoff, simple N93108TC-FX3 Layer-2/STP aggregation, or an N9332C spine-leaf OOB design. BOM, topology, facilities, KPI and validation follow the selected mode.<br>

@@ -4,7 +4,7 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
 
 ## Canonical application
 - `main/index.html`
-- Current baseline: v69
+- Current baseline: v70
 
 ## Current design decisions
 - NVIDIA GB300 NVL72 OOB:
@@ -23,3 +23,8 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
 Treat `main/index.html` as the source of truth. Commit meaningful changes with descriptive messages so future development can resume from GitHub without relying on chat history.
 
 Run the JavaScript regression tests with `node --test tests/backend.test.js`.
+
+The regression suite covers the embedded backend anchors, configurable MI355X
+server-level NIC geometry, the Cisco N9364E-SG2X-O preset and Spectrum-X-free
+guidance, unchanged GB300 NVL72 sizing, and the GB300 OOB rule that forces a
+dedicated spine-leaf design above two racks.
