@@ -768,6 +768,7 @@ function customerFilePrefix(){
 function syncCustomerName(){
   const c=String($('customerName')?.value||'').trim();
   window.CURRENT_CUSTOMER_NAME=c;
+  if(window.DESIGN_STATE)window.DESIGN_STATE.customer=c||'Customer';
   try{localStorage.setItem('ciscoAiFactoryCustomerName',c)}catch(e){}
 }
 function featureOn(id){const el=$(id);return !el||el.dataset.enabled!=='false'}
@@ -2860,7 +2861,7 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
   }
 
   window.DESIGN_STATE={
-    customer: window.CURRENT_CUSTOMER_NAME || String($('customerName')?.value||'').trim() || 'Customer',
+    customer: String($('customerName')?.value||'').trim() || 'Customer',
     generatedAt: new Date().toLocaleDateString(),
     assumptions:{
       compute:{
@@ -3263,7 +3264,11 @@ async function exportDesignPptx(){
       alert(`PowerPoint engine is not loaded correctly. JSZip=${typeof JSZip}, PptxGenJS=${typeof PptxGenJS}`);
       return;
     }
-    const d=window.DESIGN_STATE||(()=>{calc();return window.DESIGN_STATE})();
+    // Rebuild from live inputs; a customer edit or browser autofill can leave
+    // the previous calculation's cached snapshot out of date.
+    syncCustomerName();
+    calc();
+    const d=window.DESIGN_STATE;
     const selected=getSelectedPptSlides();
     if(!selected.length){alert('Select at least one slide.');return;}
     const pptx=new PptxGenJS();

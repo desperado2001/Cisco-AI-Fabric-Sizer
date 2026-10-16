@@ -4,7 +4,7 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
 
 ## Canonical application
 - `main/index.html`
-- Current baseline: v80
+- Current baseline: v81
 
 ## Current design decisions
 - NVIDIA GB300 NVL72 OOB:
@@ -32,6 +32,8 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
   - Above 8,192 GPUs, leaves and spines continue to scale proportionally between the published 10,240/16,384/32,768-GPU three-tier anchors.
 
 ## Development workflow
+PowerPoint export refreshes the design from live inputs, including the customer name. Customer edits update the cached design immediately; clearing the field uses `Customer` in the deck and no customer filename prefix.
+
 Treat `main/index.html` as the source of truth. Commit meaningful changes with descriptive messages so future development can resume from GitHub without relying on chat history.
 
 Run the JavaScript regression tests with `node --test tests/backend.test.js`.
