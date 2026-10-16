@@ -203,6 +203,22 @@ test('GB300 NVL72 sizing anchor remains unchanged', () => {
   );
 });
 
+test('GB300 beyond 64 racks retains a nonzero capacity-based spine allowance', () => {
+  const d=api.gb300EastWestDesign(70);
+  assert.equal(d.gpus,5040);
+  assert.equal(d.totalLeaves,280);
+  assert.equal(d.spinesPerPlane,40);
+  assert.equal(d.totalSpines,80);
+  assert.ok(d.physicalLeafSpineLinks<=d.totalSpines*64);
+  assert.equal(d.validatedScaleExceeded,true);
+  assert.equal(d.fabricTier,'3-tier review');
+  for(const racks of [65,66,72,128,256]) {
+    const design=api.gb300EastWestDesign(racks);
+    assert.ok(design.totalSpines>0);
+    assert.ok(design.physicalLeafSpineLinks<=design.totalSpines*64);
+  }
+});
+
 test('GB300 OOB guardrail preserves small-rack choices and forces spine-leaf above two racks', () => {
   const direct = api.gb300OobDesign(2, 0, 0, 0, 0, 'direct');
   const stp = api.gb300OobDesign(2, 0, 0, 0, 0, 'stp');

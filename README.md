@@ -4,7 +4,7 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
 
 ## Canonical application
 - `main/index.html`
-- Current baseline: v77
+- Current baseline: v78
 
 ## Current design decisions
 - NVIDIA GB300 NVL72 OOB:
@@ -12,6 +12,7 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
   - Supplied Cisco TMG screenshots (2026-10-16) confirm QSFP-40G-SR4-S (40G, MPO-12 UPC MMF, up to 150 m) and QSFP-100G-DR-S (100G, duplex LC UPC SMF, 500 m) on N9336C-SE1 from NX-OS 10.6(1). BOM spare-ordering PIDs append `=`.
   - 1–2 racks may use direct handoff, simple STP aggregation, or spine-leaf OOB.
   - More than 2 NVL72 racks requires spine-leaf OOB.
+- GB300 E-W above 64 racks includes a capacity-based spine allowance instead of zero: `2 × ceil(fabricRacks × 36 / 64)` total spines. At 70 racks this is 40 per plane / 80 total, alongside 280 leaves. This is a port-capacity lower bound; the multi-pod/superspine topology remains unresolved and requires review, not a validated complete BOM.
 - AMD MI355X / 8-GPU server profile:
   - Reuse the existing server-based HGX/NVL8-style sizing framework rather than the NVL72 rack-scale model.
   - Default AI backend switch: **Cisco N9364E-SG2X-O (Silicon One)**.

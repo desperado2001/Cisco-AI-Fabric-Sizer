@@ -1010,7 +1010,11 @@ function gb300SpinesForFabricRacks(fabricRacks){
   if(fabricRacks<=16)return 18;
   if(fabricRacks<=32)return 36;
   if(fabricRacks<=64)return 72;
-  return 0; // 3-tier architecture review beyond 64 racks
+  // Beyond the reference range, retain a capacity-based spine allowance instead
+  // of emitting zero switches. Each plane has 2 leaves/rack with 18x800G
+  // uplinks/leaf, and each spine has 64x800G ports. This is a lower-bound
+  // port-capacity estimate, not a completed three-tier topology.
+  return 2*Math.ceil((fabricRacks*2*18)/64);
 }
 function gb300EastWestDesign(activeRacks){
   const active=Math.max(1,Math.ceil(activeRacks));
@@ -1044,7 +1048,7 @@ function gb300EastWestDesign(activeRacks){
     logicalSpineSuperLinksPerPlane:0,logicalSpineSuperLinks:0,physicalSpineSuperLinks:0,spineSuperOptics:0,
     ssCoresPerPlane:0,ssPerCore:0,linksPerLeafSpinePair400:0,linksPerSpineSuperPair400:0,
     ciscoCx8DualRA:true,gb300Nvl72Ra:true,validatedScaleExceeded:active>64,
-    backendLabel:'800G aggregate / GPU · 2×400G · dual plane · GB300 NVL72 RA',
+    backendLabel:active>64?'800G aggregate / GPU · 2×400G · dual plane · spine capacity allowance; topology review required':'800G aggregate / GPU · 2×400G · dual plane · GB300 NVL72 RA',
     isCustom:false,nicProfile:'cx8',portMode:'sp_dp',hostInterfaceSpeed:800,physicalPortsPerGpu:1,
     atTwoTierBoundary:fabricRacks===64,exceedsTwoTier:active>64,fabricTier:active>64?'3-tier review':'2-tier',
     hostLeafCables,leafSpineCables
@@ -2424,7 +2428,7 @@ function calc(){
   }
 
   add('AI Backend Leaf',pid,'AI fabric leaf switch',be.totalLeaves,`${be.leavesPerPlane}/plane × ${be.planes} plane(s)`,'CVD / RA aligned where applicable');
-  add('AI Backend Spine',pid,'AI fabric spine switch',be.totalSpines,`${be.spinesPerPlane}/plane × ${be.planes} plane(s)`,'CVD / RA aligned where applicable');
+  add('AI Backend Spine',pid,'AI fabric spine switch',be.totalSpines,`${be.spinesPerPlane}/plane × ${be.planes} plane(s)`,be.gb300Nvl72Ra&&be.validatedScaleExceeded?'Capacity-based lower bound beyond 64 racks; topology and superspine design unresolved':'CVD / RA aligned where applicable');
   if(be.totalSuperspines){
     add('AI Backend Superspine',pid,'AI fabric superspine switch',be.totalSuperspines,`${be.superspinesPerPlane}/plane × ${be.planes} plane(s) · ${be.ssCoresPerPlane} cores/plane · ${be.ssPerCore} superspines/core`,'Cisco B300/CX8 large-scale RA sample');
   }
