@@ -72,6 +72,19 @@ test('MI355X UI preset stays on Cisco Silicon One without a Spectrum-X dependenc
   );
 });
 
+test('MI355X large-scale validation does not route the review to NVIDIA', () => {
+  assert.match(
+    html,
+    /isAmdMi355x\?'LARGE-SCALE FABRIC VALIDATION':'ARCHITECTURE REVIEW'/,
+    'MI355X must use AMD-specific large-scale validation wording'
+  );
+  assert.match(
+    html,
+    /Cisco, AMD, and the selected server\/NIC vendor/,
+    'MI355X large-scale reviews must identify the correct validation parties'
+  );
+});
+
 test('GB300 NVL72 sizing anchor remains unchanged', () => {
   const design = api.gb300EastWestDesign(2);
 

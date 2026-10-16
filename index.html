@@ -450,6 +450,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
   QDD-400G-DR4-S= on N9K-C9332D-GX2B / N9K-C9364D-GX2A;
   QSFP-200G-SR4-S= on N9K-C9332D-GX2B;
   QSFP-40G-SR4-S= on N9K-C93108TC-FX3 / N9K-C9332C for OOB leaf-spine links.
+  <b>AMD large-scale validation:</b> v71 removes the NVIDIA-specific architecture-review wording from MI355X results. Designs beyond the modeled 2-tier boundary now call for Cisco/AMD/OEM validation while keeping the capacity guardrail intact.<br>
   <b>Regression baseline:</b> v70 adds automated coverage for the AMD Cisco Silicon One preset, Spectrum-X-free guidance, and the GB300 OOB guardrail while retaining the v69 sizing behavior.<br>
   <b>AMD MI355X:</b> v69 models MI355X as an 8-GPU server on the shared server-sizing engine. The backend defaults to Cisco N9364E-SG2X-O Silicon One and 8×400G RoCE/server, while NIC count, active link speed and plane count are configurable; BOM, topology and validation follow those server-level assumptions. Spectrum-X is not required, and exact OEM NIC/optic/server physical data remains validation-required.<br>
   <b>GB300 OOB guardrail:</b> v67 enforces a dedicated spine-leaf OOB design whenever the deployment exceeds 2 NVL72 racks. Direct handoff and simple STP remain available only for 1–2 racks; if an SE selects either at >2 racks, the effective topology is automatically forced to spine-leaf and the UI/QA explains the override.<br>
@@ -2722,7 +2723,13 @@ function calc(){
     q.push(`<b class="good">PASS</b> CVD scale point: 256 GPUs / 32 nodes reuses the fully populated 4-leaf + 2-spine per-plane block.`);
   if(!isCustom && mode==='dual400' && top==='rail' && nodes===64 && be.leavesPerPlane===8 && be.spinesPerPlane===4)
     q.push(`<b class="good">PASS</b> 512-GPU sizing: 64 nodes = 8 leaves + 4 spines per plane (16 leaves + 8 spines total).`);
-  if(be.exceedsTwoTier)q.push(`<b class="warn">ARCHITECTURE REVIEW</b> ${be.gpus} GPUs requires ${be.leavesPerPlane} leaves/plane, beyond the ${TWO_TIER_LEAF_LIMIT_PER_PLANE}-leaf theoretical 2-tier boundary. Engage BU/CVD/NVIDIA for multi-pod / superspine design; inter-pod oversubscription is not auto-assumed.`);
+  if(be.exceedsTwoTier){
+    const scaleReviewLabel=isAmdMi355x?'LARGE-SCALE FABRIC VALIDATION':'ARCHITECTURE REVIEW';
+    const scaleReviewAction=isAmdMi355x
+      ? 'Validate the multi-pod / superspine design with Cisco, AMD, and the selected server/NIC vendor; inter-pod oversubscription is not auto-assumed.'
+      : 'Engage BU/CVD/NVIDIA for multi-pod / superspine design; inter-pod oversubscription is not auto-assumed.';
+    q.push(`<b class="warn">${scaleReviewLabel}</b> ${be.gpus} GPUs requires ${be.leavesPerPlane} leaves/plane, beyond the ${TWO_TIER_LEAF_LIMIT_PER_PLANE}-leaf theoretical 2-tier boundary. ${scaleReviewAction}`);
+  }
   else if(be.atTwoTierBoundary)q.push(`<b class="warn">BOUNDARY</b> ${be.gpus} GPUs is at the theoretical ${theoreticalTwoTierGpuBoundary}-GPU / ${TWO_TIER_LEAF_LIMIT_PER_PLANE}-leaf-per-plane 2-tier boundary. Additional scale triggers architecture review.`);
   else q.push(`<b class="good">PASS</b> Backend remains within the theoretical 2-tier leaf/spine port-capacity envelope; superspine is not required.`);
   if(suMode==='cvd4')q.push(`<b class="good">PASS</b> CVD scale-unit enforcement: ${suPlan.suCount} × 4-node / 32-GPU SUs.`);
