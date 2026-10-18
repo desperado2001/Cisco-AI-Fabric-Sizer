@@ -31,6 +31,14 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
   - The 5,040-GPU point remains two-tier at 79 leaves and 40 spines per plane.
   - Above 8,192 GPUs, leaves and spines continue to scale proportionally between the published 10,240/16,384/32,768-GPU three-tier anchors.
 
+## Developer onboarding and calculation defense
+
+If you are continuing development in a **new conversation**, begin with [Developer Handover](docs/DEVELOPER_HANDOVER.md). It provides the source-of-truth policy, code map, platform-specific invariants, developer workflow, boundary-case checklist and a copy-ready handoff prompt.
+
+To reproduce and defend the sizing arithmetic, read [Engineering Calculations](ENGINEERING_CALCULATIONS.md) alongside the [Calculation Methods and Boundary Audit](docs/CALCULATION_METHODS_AND_BOUNDARY_AUDIT.md). These describe the implemented calculations and distinguish Cisco/OEM-validated reference anchors from engineering interpolation and assumptions.
+
+Before every code change, run `node --test tests/*.test.js`. For formula changes, test N−1/N/N+1 at scale-unit, switch-capacity, power-of-two and GB300 OOB 2→3-rack boundaries. Also verify downloadable engineering CSV, CCW XLSX and presentation outputs in the browser.
+
 ## Development workflow
 PowerPoint export refreshes the design from live inputs, including the customer name. Customer edits update the cached design immediately; clearing the field uses `Customer` in the deck and no customer filename prefix.
 
