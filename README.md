@@ -27,8 +27,8 @@ Standalone browser-based Cisco Secure AI Factory / AI Fabric BOM sizing tool.
   - Beyond the modeled 128-leaf-per-plane 2-tier boundary, AMD results retain a large-scale fabric validation warning but route the review to Cisco, AMD, and the selected server/NIC vendor rather than NVIDIA.
 - NVIDIA B300 / ConnectX-8 dual-plane reference architecture:
   - Supplied Cisco BU reference material supports two-tier scale through 8,192 GPUs (128 leaves and 64 spines per plane) without superspine.
-  - Published GPU and 512-GPU SU designs are validation anchors, not hard sizing buckets. Shared-fabric leaf and spine counts interpolate from actual port demand.
-  - The 5,040-GPU point remains two-tier at 79 leaves and 40 spines per plane.
+  - Published GPU and 512-GPU SU designs are validation anchors, not hard sizing buckets. Shared-fabric leaf and spine counts must pass whole-link mesh and cage-budget checks; aggregate capacity alone is insufficient.
+  - The 5,040-GPU point uses a complete symmetric 400G mesh at 80 leaves and 64 spines per plane.
   - Above 8,192 GPUs, leaves and spines continue to scale proportionally between the published 10,240/16,384/32,768-GPU three-tier anchors.
 
 ## Developer onboarding and calculation defense
@@ -50,3 +50,15 @@ The regression suite covers the embedded backend anchors, configurable MI355X
 server-level NIC geometry, the Cisco N9364E-SG2X-O preset and Spectrum-X-free
 guidance, unchanged GB300 NVL72 sizing, and the GB300 OOB rule that forces a
 dedicated spine-leaf design above two racks.
+
+## Whole-link connectivity validation
+
+All generic backend NIC profiles and B300 dual-plane two-tier layouts now check integer links per leaf/spine pair, per-leaf bandwidth and both endpoint cage budgets. The frontend checks its selected oversubscription with whole 400G links. The 600-server AMD 8x400G example uses 76 active leaves and 64 active spines (79/66 including 3% spares). Breakout branches may connect different peers. Layouts without a verified mapping show architecture review and export `nonBlocking: false`; vendor qualification remains separate. See the dated correction in the calculation documents.
+
+## Physical layout audit
+
+See [Layout Verification](docs/LAYOUT_VERIFICATION.md) for domain checks and the 70-rack GB300 example. The backend passes its modeled port map, but the current converged frontend misses the selected 2:1 target and the fixed OOB spine pair exceeds its port capacity. Validation and affected purchasing notes now retain these findings; refreshing a BOM alone does not repair those designs.
+
+## Frontend and OOB sizing correction
+
+GB300 converged frontend now honors the selected oversubscription using a whole-link mesh and reserves storage/management receiving ports. OOB scales in redundant routed aggregation blocks with upstream ports reserved and own-switch management included. At 70 racks, 12 EBoxes and a 2:1 target: 40 frontend leaves + 16 spines, and 10 OOB SE1 spines in five blocks. OOB requires redundant customer-core handoffs. See the latest correction at the top of [Layout Verification](docs/LAYOUT_VERIFICATION.md); it supersedes the earlier audit failures.

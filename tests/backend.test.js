@@ -10,7 +10,7 @@ const end = html.indexOf('function frontendDesign');
 assert.ok(start >= 0 && end > start, 'backend sizing functions must remain discoverable in index.html');
 
 const api = new Function(
-  `${html.slice(start, end)}; return { backendDesign, gb300EastWestDesign, gb300OobDesign, runBackendRegressionSuite, tmgQualified, twoTierPortPlan };`
+  `${html.slice(start, end)}; return { backendDesign, gb300EastWestDesign, gb300OobDesign, runBackendRegressionSuite, tmgQualified, twoTierPortPlan, completeMeshPlan };`
 )();
 
 test('embedded backend regression suite passes', () => {
@@ -68,12 +68,13 @@ test('GB300 OOB choices enforce the guardrail across deployment scales', () => {
   }
 });
 
-test('OOB spine uses SE1 and flags its GB300 port capacity', () => {
-  const within=api.gb300OobDesign(17,0,0,0,0,'spine');
-  const beyond=api.gb300OobDesign(18,0,0,0,0,'spine');
+test('OOB spine uses SE1 and adds redundant blocks at capacity boundaries', () => {
+  const within=api.gb300OobDesign(16,0,0,0,0,'spine');
+  const beyond=api.gb300OobDesign(17,0,0,0,0,'spine');
   assert.equal(within.aggregationPid,'N9336C-SE1');
   assert.equal(within.spineCapacityExceeded,false);
-  assert.equal(beyond.spineCapacityExceeded,true);
+  assert.equal(beyond.spineCapacityExceeded,false);
+  assert.ok(beyond.oobSpines>within.oobSpines);
   assert.equal(html.includes('N9K-C9332C'),false);
 });
 
@@ -123,8 +124,8 @@ test('NVIDIA B300/CX8 dual-plane remains two-tier at 5,040 and 8,192 GPUs', () =
 
   assert.equal(at5040.gpus, 5040);
   assert.equal(at5040.ciscoCx8DualRA, true);
-  assert.equal(at5040.leavesPerPlane, 79);
-  assert.equal(at5040.spinesPerPlane, 40);
+  assert.equal(at5040.leavesPerPlane, 80);
+  assert.equal(at5040.spinesPerPlane, 64);
   assert.equal(at5040.exceedsTwoTier, false);
   assert.equal(at5040.totalSuperspines, 0);
   assert.equal(at8192.gpus, 8192);
@@ -146,7 +147,7 @@ test('NVIDIA B300/CX8 shared fabric interpolates instead of rounding to hard SUs
   );
   assert.deepEqual(
     [betweenTwoTierAnchors.gpus, betweenTwoTierAnchors.leavesPerPlane, betweenTwoTierAnchors.spinesPerPlane],
-    [640, 10, 5]
+    [640, 10, 8]
   );
   assert.deepEqual(
     [betweenThreeTierAnchors.gpus, betweenThreeTierAnchors.leavesPerPlane, betweenThreeTierAnchors.spinesPerPlane],
@@ -256,4 +257,65 @@ test('GB300 OOB guardrail preserves small-rack choices and forces spine-leaf abo
   assert.equal(forced.guardrailForced, true);
   assert.equal(forced.oobSpines, 2);
   assert.equal(forced.simpleOob, false);
+});
+
+// Independently check pair counts, bandwidth and physical cage budgets.
+function assertWholeMesh(d) {
+  assert.equal(d.portMapVerified,true);
+  const pair=d.meshLinksPerPair, perCage=800/d.meshLinkSpeedG;
+  assert.ok(Number.isInteger(pair)&&pair>0);
+  for(let i=0;i<d.leavesPerPlane;i++) {
+    assert.equal(d.uplinkDist[i]*perCage,d.spinesPerPlane*pair);
+    assert.ok(d.spinesPerPlane*pair>=d.hostLinkDist[i]);
+    assert.ok(d.hostCageDist[i]+d.uplinkDist[i]<=64);
+  }
+  assert.ok(Math.ceil(d.leavesPerPlane*pair/perCage)<=64);
+  assert.equal(d.physicalLeafSpineLinks,d.uplinkDist.reduce((a,b)=>a+b,0)*d.planes);
+  assert.equal(d.logicalLeafSpineLinks,d.leavesPerPlane*d.spinesPerPlane*pair*d.planes);
+  assert.equal(d.leafSpineOptics,d.physicalLeafSpineLinks*2);
+}
+
+test('600 AMD servers use 76 leaves and 64 fully connected 400G spines',()=>{
+  const d=api.backendDesign(600,'custom','rail',8,{nicProfile:'amd-mi355x',profileBasis:'server',planes:1,linksPerServer:8,linkSpeed:400});
+  assert.deepEqual([d.totalLeaves,d.totalSpines,d.meshLinksPerPair,d.spineCagesUsed],[76,64,1,38]);
+  assert.deepEqual([d.switchHostOptics,d.leafSpineOptics],[2432,4864]);
+  assertWholeMesh(d);
+});
+
+test('whole-link mapping covers AMD, CX7, CX8, CX9 and 800G profiles at intermediate scales',()=>{
+  for(const nodes of [1,16,32,80,563,600,630,1024]) {
+    for(const speed of [200,400,800])for(const planes of [1,2]) {
+      for(const nicProfile of ['amd-mi355x','cx7','cx8','cx9-rubin']) {
+        const d=api.backendDesign(nodes,'custom','rail',8,{nicProfile,profileBasis:'server',planes,linksPerServer:8,linkSpeed:speed});
+        if(d.portMapVerified)assertWholeMesh(d);
+        else assert.equal(d.exceedsTwoTier,true);
+      }
+    }
+    const d=api.backendDesign(nodes,'dual400','rail',8,null);
+    assertWholeMesh(d);
+  }
+});
+
+test('800G two-tier overflow and unverified three-tier estimates cannot claim a valid mesh',()=>{
+  const d=api.backendDesign(600,'single800','rail',8,null);
+  assert.equal(d.portMapVerified,false);
+  assert.equal(d.exceedsTwoTier,true);
+  assert.equal(api.backendDesign(1152,'dual400','rail',8,null).portMapVerified,false);
+  assert.equal(api.completeMeshPlan(Array(76).fill(32),800),null);
+  assert.ok(!html.includes('nonBlocking:!!be.ciscoCx8DualRA || true'));
+});
+
+test('frontend respects its selected oversubscription on every whole-link mesh',()=>{
+  const make=new Function(html.slice(start,end)+html.slice(html.indexOf('function frontendDesign'),html.indexOf('function add(cat'))+'; return frontendDesign;')();
+  for(const n of [32,80,600,1000])for(const over of [1,2,3])for(const external of [0,48]){
+    const d=make(n,5,2,over,external);
+    assert.equal(d.portMapVerified,true);
+    for(let i=0;i<d.leaves;i++){
+      assert.equal(d.uplinkDist[i],d.spines*d.meshLinksPerPair);
+      assert.ok(d.uplinkDist[i]*400>=d.endpointDist[i]*200/over);
+      assert.ok(d.hostCageDist[i]+d.uplinkDist[i]<=64);
+    }
+    assert.ok(d.leaves*d.meshLinksPerPair+Math.ceil(external/d.spines)<=64);
+    assert.equal(d.physicalUplinkLinks,d.uplinkDist.reduce((a,b)=>a+b,0));
+  }
 });

@@ -1,5 +1,64 @@
 # Cisco Secure AI Factory Sizer — Engineering Calculations and Design Defense
 
+## NVL8 and MI355X profile recheck ? 2026-10-19
+
+The modeled full Rubin NVL8 rack contains nine eight-GPU servers. Backend rail sizing now normalizes each such rack to nine servers, and frontend/OOB endpoint counts use those enclosed servers. Previously backend rail grouping used rack units while frontend and OOB counted only one server per rack. GPU totals and rack-level facility inputs remain based on the selected rack configuration.
+
+Odd dual-plane MI355X overrides now provision each symmetric plane for servers x ceil(NICs per server / planes), rather than ceil(all server links / planes). This conservatively covers the busier per-server plane; actual physical NIC and host-optic counts remain servers x NICs. The default eight-NIC single-plane profile is unchanged.
+
+Profile tests cover AMD, Rubin NVL8 single/dual plane, CX8 physical single/dual port distinctions, rack/server equivalence, shared frontend storage capacity and OOB endpoints. Existing HGX single-800G layouts beyond the complete modeled two-tier limit remain explicitly flagged for architecture review. These checks do not add a deployable generic three-tier design or certify OEM NIC/optic compatibility. All 34 tests pass; rendered browser/export verification remains outstanding.
+
+
+## Frontend and OOB correction ? 2026-10-19
+
+This section supersedes the earlier fixed-uplink frontend and fixed-pair OOB findings below.
+
+- GB300 converged frontend now solves a whole-link mesh at the selected 1:1, 2:1 or 3:1 target. It prefers whole 800G peer links and uses 400G breakout where needed. Host cages round per leaf. Storage and management receiving ports are reserved per spine before accepting a layout. These are derived engineering designs, not newly published Cisco RA anchors.
+- Generic frontend also reserves shared storage receiving capacity. Dedicated storage uses its own receiving tier.
+- GB300 OOB scales as routed aggregation blocks with two SE1 spines/block. Each rack consumes two downlink ports per spine; each low-speed leaf consumes one. One upstream port per spine is reserved, so downlinks may use at most 35 of 36 ports. Rack/leaf identities and port ranges are retained in the block map. Blocks require redundant routed customer OOB/core handoffs; they do not form an unmodeled L2 mesh.
+- OOB sizing includes management of the newly added aggregation and low-speed switches. Generic 40G OOB scales to redundant blocks too, with up to 35 leaves/pair and a reserved upstream port per spine.
+- BOMs now include GB300 low-speed leaf/spine 40G optic endpoints/cables, routed OOB upstream optic endpoints/cables, and management receiving optics/cables. Customer-core switch compatibility, routing and cable reach remain qualification items.
+
+Worked 70-rack GB300 case (12 EBoxes, five management nodes, three ND nodes, 2:1 frontend target, shared spines):
+
+| Item | Corrected active quantity |
+|---|---:|
+| E-W leaves / spines | 160 / 128, unchanged |
+| Converged frontend leaves / spines | 40 / 16 |
+| Frontend leaf/spine links | 640 x 800G |
+| Frontend leaf/spine optic endpoints / MPO branch cables | 1,280 / 1,280 |
+| Frontend switch-host optics | 1,280, rounded per leaf |
+| OOB rack ToRs / shared low-speed leaves | 140 / 10 |
+| OOB SE1 spines | 10 in five redundant blocks |
+| OOB upstream links | 10, one per spine |
+
+Each frontend leaf has 63 x 400G hosts (25.2 Tb/s) and 16 x 800G uplinks (12.8 Tb/s), giving 1.96875:1, within the selected 2:1 target. Each frontend spine uses 40 compute-facing cages plus up to two external-facing cages. The five OOB blocks consume 36, 36, 36, 36 and 11 ports per spine including the upstream port. Spare percentages apply after these active quantities.
+
+Validation covers frontend targets across 1?130 racks, OOB pair and self-management conservation through 512 racks, and generic OOB block boundaries. All 31 tests pass. Site qualification remains visible as REVIEW; the previous frontend oversubscription and OOB port-capacity failures are removed for the worked case. Browser graphics and generated artifact rendering have not been visually verified.
+
+
+## Whole-link mesh correction (2026-10-19)
+
+This section supersedes earlier aggregate-only spine formulas and intermediate-scale examples below. Published reference counts remain reference anchors, not proof of every interpolated wiring plan.
+
+Backend profiles (AMD MI355X, single-800G HGX, custom CX7/CX8/CX9, Rubin NVL8, and B300 dual-plane) now check a complete symmetric mesh of whole logical links. For F leaves, S spines, speed v and k links per leaf/spine pair:
+
+- q = 800/v logical branches per 800G cage.
+- k = ceil(maximum host links per leaf / S), at least one.
+- Every leaf has S*k fabric branches. Require host cages + S*k/q <= 64.
+- Every spine has F*k branches. Require F*k/q <= 64.
+- Both fabric branch totals must pack into whole cages. Search S from two upward; when needed an odd leaf count can increase by one for symmetric packing.
+- Counts of 800G-equivalent cage pairs describe optic occupancy. Breakout branches can terminate on different peer switches; they are not necessarily unsplit 800G point-to-point cables. OEM/TMG breakout and lane/cable qualification remains required.
+
+For 600 active MI355X servers at 8x400G, one plane: 76 leaves, **64 spines**, one 400G branch per pair; 32 uplink cages/leaf and 38 downlink cages/spine. Host-side optics=4,800; switch-host optics=2,432; leaf/spine optic endpoints=4,864. With 3% per-row spares: 79 leaves and 66 spines. The old 38-spine result was only an aggregate capacity bound.
+
+B300 dual-plane at 5,040 GPUs now uses 80 leaves and 64 spines per plane for this symmetric mapping, rather than 79/40. At 4,608 GPUs it uses 72/64 per plane, rather than 72/36. Exact published anchor counts remain unchanged.
+
+The frontend similarly checks whole 400G links and the selected oversubscription per leaf, not only total spine capacity. At 600 compute + five management nodes, two 200G links/node and 2:1: 15 leaves, seven spines, three 400G links per pair, 315 uplinks and 630 uplink optic endpoints (before spares).
+
+If a complete mapping cannot fit, quantities remain explicitly marked as capacity estimates requiring architecture review. Unverified generic 800G overflow and interpolated B300 three-tier layouts no longer export an unconditional nonblocking claim. Existing GB300 compact two-tier and bounded derived three-tier calculations retain their dedicated validation. Storage and OOB domain-specific capacity checks are separate; these checks do not certify an entire site or vendor architecture.
+
+
 **Date:** 2026-10-17  
 **Source:** [main/index.html](./index.html), Git blob SHA b06ae6229ce1e3a58aa1688e3a5611f3c2ff38fa  
 **Purpose:** Independently reproduce and defend the app's backend, frontend, storage, OOB, transceiver, cabling, PSU and rack quantities.

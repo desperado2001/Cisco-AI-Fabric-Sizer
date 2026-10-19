@@ -1081,6 +1081,7 @@ function gb300EastWestDesign(activeRacks){
     physicalLeafSpineLinks,leafSpineOptics,logicalLeafSpineLinksPerPlane:logicalLeafSpineLinks/2,logicalLeafSpineLinks,
     logicalSpineSuperLinksPerPlane:physicalSpineSuperLinks,logicalSpineSuperLinks:physicalSpineSuperLinks*2,physicalSpineSuperLinks,spineSuperOptics:physicalSpineSuperLinks*2,
     ssCoresPerPlane:threeTier?3:0,ssPerCore,linksPerLeafSpinePair400:compact?compact.pairLinks:threeTier?12:0,linksPerSpineSuperPair400:threeTier?48/ssPerCore:0,
+    portMapVerified:!!compact || (threeTier && !derivedCapacityExceeded) || (!threeTier && Number.isInteger(36/spinesPerPlane) && leavesPerPlane*(36/spinesPerPlane)<=128),
     gb300CompactTwoTier:!!compact,
     derivedCapacityExceeded,gb300DerivedThreeTier:threeTier,
     ciscoCx8DualRA:true,gb300Nvl72Ra:true,validatedScaleExceeded:active>64,
@@ -1090,47 +1091,67 @@ function gb300EastWestDesign(activeRacks){
     hostLeafCables,leafSpineCables
   };
 }
-function gb300ConvergedDesign(activeRacks){
-  const racks=Math.max(1,Math.ceil(activeRacks));
-  const host400Ports=racks*36;
-
-  // Cisco GB300 Enterprise RA published anchors:
-  // 2 racks -> 2 converged N9364E switches total (collapsed pair)
-  // 4 racks -> 4 leaves + 2 spines = 6
-  // 8 racks -> 8 leaves + 4 spines = 12
-  // 16 racks -> 8 leaves + 4 spines = 12
-  //
-  // Cisco's published minimum is 2 racks. A single-rack deployment is therefore
-  // treated as a 1-rack starter using the published 2-rack collapsed pair.
-  let leaves,spines,collapsed=false,validatedMinRacks=2;
-  if(racks<=2){
-    leaves=2; spines=0; collapsed=true;
-  }else if(racks<=4){
-    leaves=4; spines=2;
-  }else if(racks<=16){
-    leaves=8; spines=4;
-  }else{
-    const blocks=Math.ceil(racks/16);
-    leaves=8*blocks; spines=4*blocks;
+// Derived complete 800G mesh; reserve receiving-spine ports for storage/management.
+function gb300ConvergedDesign(activeRacks,over=2,external400=0){
+  const racks=Math.max(1,Math.ceil(activeRacks)),host400Ports=racks*36;
+  over=Math.max(1,+over||2);external400=Math.max(0,Math.ceil(external400));
+  const collapsed=racks<=2;
+  let leaves=collapsed?2:racks<=4?4:racks<=16?8:8*Math.ceil(racks/16);
+  let spines=0,host,up,externalDist=[],pair=0,meshSpeed=800,verified=collapsed;
+  for(;leaves<=128;leaves++){
+    host=dist(host400Ports,leaves);
+    if(collapsed){up=Array(leaves).fill(0);externalDist=dist(external400,leaves);verified=host.every((n,i)=>Math.ceil(n/2)+Math.ceil(externalDist[i]/2)<=64);break;}
+    for(spines=2;spines<=64;spines++){
+      pair=Math.max(1,Math.ceil(Math.max(...host)*400/over/(spines*800)));
+      externalDist=dist(Math.ceil(external400/2),spines).map(n=>n*2);
+      if(host.every(n=>Math.ceil(n/2)+spines*pair<=64) && externalDist.every(n=>leaves*pair+Math.ceil(n/2)<=64)){
+        up=Array(leaves).fill(spines*pair);verified=true;break;
+      }
+    }
+    if(!verified){
+      // 400G breakout supports larger peer counts while retaining whole optic cages.
+      for(spines=2;spines<=128;spines++){
+        pair=Math.max(1,Math.ceil(Math.max(...host)/over/spines));
+        externalDist=dist(Math.ceil(external400/2),spines).map(n=>n*2);
+        if((spines*pair)%2 || (leaves*pair)%2)continue;
+        if(host.every(n=>Math.ceil(n/2)+spines*pair/2<=64) && externalDist.every(n=>(leaves*pair+n)/2<=64)){
+          up=Array(leaves).fill(spines*pair/2);meshSpeed=400;verified=true;break;
+        }
+      }
+    }
+    if(verified)break;
   }
-
-  // At the collapsed 1-2 rack tier there is no separate leaf-spine layer.
-  const leaf400Uplinks=collapsed?0:leaves*16;
-  const physicalUplinkLinks=collapsed?0:Math.ceil(leaf400Uplinks/2);
-
-  return {
-    gb300Nvl72Ra:true,enterpriseRa:true,validatedMinRacks,collapsed,
-    endpoints:host400Ports,host400Ports,leaves,spines,
-    totalConvergedSwitches:leaves+spines,
-    endpointDist:dist(host400Ports,leaves),
-    hostCageDist:dist(Math.ceil(host400Ports/2),leaves),
-    uplinkDist:collapsed?Array(leaves).fill(0):Array(leaves).fill(8),
-    hostSwitchOptics:Math.ceil(host400Ports/2),
-    physicalUplinkLinks,
-    leafSpineOptics:physicalUplinkLinks*2,
-    hostCables:host400Ports,
-    leafSpineCables:physicalUplinkLinks*2
-  };
+  if(!verified&&!collapsed){leaves=Math.ceil(host400Ports/64);host=dist(host400Ports,leaves);spines=Math.ceil(leaves/2);pair=0;up=host.map(n=>Math.ceil(n/2/over));externalDist=dist(external400,spines);}
+  const hc=host.map(n=>Math.ceil(n/2)), physicalUplinkLinks=up.reduce((a,b)=>a+b,0);
+  return {gb300Nvl72Ra:true,enterpriseRa:false,derivedConverged:true,validatedMinRacks:2,collapsed,
+    portMapVerified:verified,meshLinksPerPair:pair,meshLinkSpeedG:meshSpeed,frontendOver:over,external400,externalPortDist:externalDist,
+    endpoints:host400Ports,host400Ports,leaves,spines,totalConvergedSwitches:leaves+spines,
+    endpointDist:host,hostCageDist:hc,uplinkDist:up,hostSwitchOptics:hc.reduce((a,b)=>a+b,0),
+    physicalUplinkLinks,leafSpineOptics:physicalUplinkLinks*2,hostCables:host400Ports,leafSpineCables:physicalUplinkLinks*2};
+}
+// Each independent routed OOB block has a redundant SE1 pair. Reserve one
+// upstream port per spine; rack ToRs and low-speed leaves attach to both peers.
+function oobPairPlan(racks,lowSpeedLeaves){
+  const blocks=[];
+  const items=[...Array.from({length:racks},(_,i)=>({width:2,type:"rack",id:i+1})),...Array.from({length:lowSpeedLeaves},(_,i)=>({width:1,type:"leaf",id:i+1}))];
+  for(const item of items){
+    let b=blocks.find(x=>x.ports+item.width<=35);
+    if(!b){b={ports:0,racks:0,lowSpeedLeaves:0,connections:[],upstreamPort:36};blocks.push(b);}
+    b.connections.push({type:item.type,id:item.id,firstPort:b.ports+1,lastPort:b.ports+item.width});
+    b.ports+=item.width;if(item.width===2)b.racks++;else b.lowSpeedLeaves++;
+  }
+  return {blocks,spines:blocks.length*2,upstreamLinks:blocks.length*2};
+}
+function genericOobPlan(endpoints,mode='stp1g'){
+  let leaves=Math.max(2,Math.ceil(endpoints/48)),spines=0,aggregators=0,total=endpoints;
+  for(let i=0;i<32;i++){
+    spines=leaves>2&&mode==='spine40g'?2*Math.ceil(leaves/35):0;
+    aggregators=leaves>2&&mode==='stp1g'?2*Math.ceil(leaves/47):0;
+    total=endpoints+leaves+spines+aggregators;
+    const next=Math.max(2,Math.ceil(total/48));
+    if(next===leaves)break;leaves=next;
+  }
+  return {leaves,spines,aggregators,endpoints:total,upstreamLinks:spines};
 }
 function gb300ManagementFabric(mgmtNodes){
   const nodes=Math.max(0,Math.ceil(mgmtNodes||0));
@@ -1160,7 +1181,7 @@ function gb300OobDesign(activeRacks,storageServers=0,managementServers=0,ndNodes
   const managementServerEndpoints=Math.max(0,managementServers)*2;
   const ndEndpoints=Math.max(0,ndNodes)*2;
   const switchMgmtEndpoints=Math.max(0,networkSwitches);
-  const externalLowSpeedEndpoints=storageServerEndpoints+managementServerEndpoints+ndEndpoints+switchMgmtEndpoints;
+  let externalLowSpeedEndpoints=storageServerEndpoints+managementServerEndpoints+ndEndpoints+switchMgmtEndpoints;
 
   let lowSpeedLeaves=Math.max(2,Math.ceil(externalLowSpeedEndpoints/48));
   if(lowSpeedLeaves%2)lowSpeedLeaves++;
@@ -1213,6 +1234,18 @@ function gb300OobDesign(activeRacks,storageServers=0,managementServers=0,ndNodes
   const stpUsable100gPortsPerPair=10;
   const stpCapacityExceeded=selectedMode==='stp' && rackTor100gLinks>stpUsable100gPortsPerPair;
 
+  let pairPlan=null;
+  if(selectedMode==='spine'){
+    const base=externalLowSpeedEndpoints;
+    for(let i=0;i<32;i++){
+      pairPlan=oobPairPlan(racks,lowSpeedLeaves);
+      externalLowSpeedEndpoints=base+lowSpeedLeaves+pairPlan.spines;
+      let next=Math.max(2,Math.ceil(externalLowSpeedEndpoints/48));if(next%2)next++;
+      if(next===lowSpeedLeaves)break;lowSpeedLeaves=next;
+    }
+    pairPlan=oobPairPlan(racks,lowSpeedLeaves);oobSpines=pairPlan.spines;
+    aggregationLabel='Routed OOB aggregation blocks with redundant spine pairs';
+  }
   const lowSpeedUplinkLinks=lowSpeedLeaves*2;
 
   return {
@@ -1223,8 +1256,9 @@ function gb300OobDesign(activeRacks,storageServers=0,managementServers=0,ndNodes
     rackTorOptics,rackTorCables,
     storageServerEndpoints,managementServerEndpoints,ndEndpoints,switchMgmtEndpoints,
     externalLowSpeedEndpoints,lowSpeedLeaves,lowSpeedUplinkLinks,
+    pairBlocks:pairPlan?.blocks||[],upstreamLinks:pairPlan?.upstreamLinks||0,upstreamPortsPerSpine:pairPlan?1:0,
     oobSpines,stpCapacityExceeded,stpUsable100gPortsPerPair,
-    spineCapacityExceeded:selectedMode==='spine' && rackTor100gLinks+lowSpeedUplinkLinks>oobSpines*36,
+    spineCapacityExceeded:selectedMode==='spine' && (!pairPlan || pairPlan.blocks.some(b=>b.ports+1>36)),
     simpleOob:selectedMode!=='spine'
   };
 }
@@ -1261,6 +1295,19 @@ function tmgStatus(devicePid,opticPid){
 }
 const TWO_TIER_LEAF_LIMIT_PER_PLANE = 128; // Cisco B300/CX8 RA: 2-tier scales to 128 leaves / 64 spines per plane = 8,192 GPUs
 
+// Complete mesh of whole logical links, with breakout branches allowed to different peers.
+function completeMeshPlan(host,speed=400,cages=64,over=1,external=0){
+  const perCage=800/speed, leaves=host.length;
+  if(!Number.isInteger(perCage)||perCage<1)return null;
+  for(let spines=2;spines<=cages*perCage;spines++){
+    const pairLinks=Math.max(1,Math.ceil(Math.max(...host)/over/spines));
+    const uplinks=spines*pairLinks;
+    if(uplinks%perCage || (leaves*pairLinks)%perCage)continue;
+    if(host.every(n=>Math.ceil(n/perCage)+uplinks/perCage<=cages) && leaves*pairLinks+Math.ceil(external/spines)<=cages*perCage)
+      return {spines,pairLinks,uplinks,uplinkCages:uplinks/perCage,spineCages:leaves*pairLinks/perCage};
+  }
+  return null;
+}
 function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
   let speed,logicalPerGpu,planes,isCustom=!!customProfile,aggregatePerGpu,nicProfile=null,hostInterfaceSpeed=null,portMode=null,physicalPortsPerGpu=1;
   let profileBasis='gpu',linksPerServer=null,physicalPortsPerServer=null;
@@ -1293,7 +1340,7 @@ function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
   const gpus=nodes*gpusPerNode,totalLogicalLinks=profileBasis==='server'?nodes*linksPerServer:gpus*logicalPerGpu;
   // Symmetric leaf/spine blocks are sized to the busier plane when an odd server-link
   // assumption is split across two planes. Validation flags the uneven input.
-  const linksPerPlane=Math.ceil(totalLogicalLinks/planes);
+  const linksPerPlane=profileBasis==='server'?nodes*Math.ceil(linksPerServer/planes):Math.ceil(totalLogicalLinks/planes);
   const ciscoCx8DualRA=gpusPerNode===8 && speed===400 && logicalPerGpu===2 && planes===2 &&
     (!isCustom || nicProfile==='cx8');
 
@@ -1394,7 +1441,6 @@ function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
   }
 
   // 800G-equivalent physical leaf-spine links.
-  const linksPerPlanePhysical=up.reduce((a,b)=>a+b,0);
   const physicalHostLinks=totalLogicalLinks;
   const hostOptics=isCustom?(profileBasis==='server'?nodes*physicalPortsPerServer:gpus*physicalPortsPerGpu):gpus;
   const portModeLabel=portMode==='sp_dp'?'single port / dual plane':portMode==='dp_dp'?'dual port / dual plane':'single port / single plane';
@@ -1404,6 +1450,26 @@ function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
       : `${logicalPerGpu}×${speed}G / GPU · ${portModeLabel}`)
     : `${aggregatePerGpu}G aggregate / GPU · ${logicalPerGpu}×${speed}G${planes===2?' · dual plane':' · single plane'}`;
 
+  let mesh=null;
+  if(!superspinesPerPlane){
+    mesh=completeMeshPlan(hl,speed);
+    if(!mesh && leaves%2 && leaves<128){
+      const candidate=dist(linksPerPlane,leaves+1);
+      const next=completeMeshPlan(candidate,speed);
+      if(next){leaves++;hl=candidate;hc=hl.map(n=>Math.ceil(n*speed/800));mesh=next;}
+    }
+    if(mesh){
+      spines=mesh.spines;
+      up=Array(leaves).fill(mesh.uplinkCages);
+      logicalLeafSpineLinksPerPlane=leaves*mesh.uplinks;
+      logicalLeafSpineLinks=logicalLeafSpineLinksPerPlane*planes;
+      linksPerLeafSpinePair400=speed===400?mesh.pairLinks:0;
+      exceedsTwoTier=false;
+    }else exceedsTwoTier=true;
+    atTwoTierBoundary=!!mesh && leaves===Math.floor(51200/speed);
+  }
+  const linksPerPlanePhysical=up.reduce((a,b)=>a+b,0);
+  const portMapVerified=!!mesh;
   const fabricTier=superspinesPerPlane>0?'3-tier':(exceedsTwoTier?'3-tier review':'2-tier');
 
   return{
@@ -1414,7 +1480,7 @@ function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
     logicalLeafSpineLinksPerPlane,logicalLeafSpineLinks,
     logicalSpineSuperLinksPerPlane,logicalSpineSuperLinks,physicalSpineSuperLinks,spineSuperOptics,
     raScaleUnits,ssCoresPerPlane,ssPerCore,linksPerLeafSpinePair400,linksPerSpineSuperPair400,
-    ciscoCx8DualRA,validatedScaleExceeded,
+    ciscoCx8DualRA,validatedScaleExceeded,portMapVerified,meshLinkSpeedG:speed,meshLinksPerPair:mesh?.pairLinks||0,spineCagesUsed:mesh?.spineCages||0,
     backendLabel,isCustom,nicProfile,portMode,profileBasis,linksPerServer,physicalPortsPerServer,hostInterfaceSpeed,physicalPortsPerGpu,atTwoTierBoundary,exceedsTwoTier,fabricTier
   }
 }
@@ -1433,7 +1499,7 @@ function runBackendRegressionSuite(){
       `${su563.suCount} SUs · ${su563.deployedNodes} fabric-cabled nodes`);
   const b563su=backendDesign(su563.deployedNodes,'dual400','rail',8,null);
   add('SU rounding · 563-node request backend switch count',
-      (b563su.totalLeaves+b563su.totalSpines)===216,
+      (b563su.totalLeaves+b563su.totalSpines)===272,
       `${b563su.totalLeaves} leaves + ${b563su.totalSpines} spines = ${b563su.totalLeaves+b563su.totalSpines}`);
 
   function checkCase(name,nodes,mode,topology,gpusPerNode,profile,expected=null){
@@ -1502,14 +1568,14 @@ function runBackendRegressionSuite(){
   anchors.forEach(x=>checkCase(`Cisco CX8 ${x.g.toLocaleString()} GPU`,x.g/8,'dual400','rail',8,null,x.e));
 
   // Off-anchor proportional case: 576 nodes = 4,608 GPUs.
-  // Dual-plane equivalent is 72 leaves/plane + 36 spines/plane,
-  // 144 leaves + 72 spines total, with 4,608 host optics,
+  // Dual-plane equivalent is 72 leaves/plane + 64 spines/plane,
+  // 144 leaves + 128 spines total, with 4,608 host optics,
   // 4,608 switch-side host optics and 9,216 leaf-spine optical endpoints.
   const nineSu=checkCase('Cisco CX8 9-SU / 4,608-GPU golden',576,'dual400','rail',8,null,{
     leavesPerPlane:72,
-    spinesPerPlane:36,
+    spinesPerPlane:64,
     totalLeaves:144,
-    totalSpines:72,
+    totalSpines:128,
     totalSuperspines:0,
     hostOptics:4608,
     switchHostOptics:4608,
@@ -1527,11 +1593,12 @@ function runBackendRegressionSuite(){
   [128,384,768,1536,4096,4504,4608,6144,9216,12288,20480,28672].forEach(g=>{
     const b=checkCase(`Cisco CX8 intermediate ${g.toLocaleString()} GPU`,g/8,'dual400','rail',8,null);
     if(g<=8192){
-      const expectedLeaves=Math.max(4,Math.ceil(g/64));
+      const initialLeaves=Math.max(4,Math.ceil(g/64));
+      const expectedLeaves=completeMeshPlan(dist(g,initialLeaves),400)?initialLeaves:initialLeaves+1;
       add(`Cisco CX8 intermediate ${g.toLocaleString()} GPU · no leaf power-of-two rounding`,
           b.leavesPerPlane===expectedLeaves,
           `${b.leavesPerPlane} leaves/plane = ceil(${g}/64), expected ${expectedLeaves}`);
-      const expectedSpines=Math.max(2,Math.ceil(expectedLeaves/2));
+      const expectedSpines=completeMeshPlan(b.hostLinkDist,b.speed).spines;
       add(`Cisco CX8 intermediate ${g.toLocaleString()} GPU · proportional spine scaling`,
           b.spinesPerPlane===expectedSpines,
           `${b.spinesPerPlane} spines/plane = ceil(${expectedLeaves}/2), expected ${expectedSpines}`);
@@ -1605,7 +1672,7 @@ function runBackendRegressionSuite(){
   };
 }
 
-function frontendDesign(nodes,mgmt,linksPerNode,over){
+function frontendDesign(nodes,mgmt,linksPerNode,over,external400=0){
   const endpoints=(nodes+mgmt)*linksPerNode;let leaves=2;
   while(true){
     const ed=dist(endpoints,leaves),
@@ -1613,15 +1680,59 @@ function frontendDesign(nodes,mgmt,linksPerNode,over){
           up=ed.map(x=>Math.ceil((x*200/over)/400));
     if(hc.every((c,i)=>c+up[i]<=64)){
       const physicalUplinkLinks=up.reduce((a,b)=>a+b,0);
-      const spines=Math.max(2,Math.ceil(physicalUplinkLinks/64));
-      return{
-        endpoints,leaves,spines,endpointDist:ed,hostCageDist:hc,uplinkDist:up,
+      const mesh=completeMeshPlan(ed.map(n=>n/2),800,64,over,external400);
+      if(!mesh && leaves<64){leaves++;continue;}
+      const spines=mesh?mesh.spines:Math.max(2,Math.ceil(physicalUplinkLinks/64));
+      const mappedUp=mesh?Array(leaves).fill(mesh.uplinkCages):up;
+      return{portMapVerified:!!mesh,meshLinksPerPair:mesh?.pairLinks||0,external400,
+        endpoints,leaves,spines,endpointDist:ed,hostCageDist:hc,uplinkDist:mappedUp,
         hostSwitchOptics:hc.reduce((a,b)=>a+b,0),
-        physicalUplinkLinks
+        physicalUplinkLinks:mappedUp.reduce((a,b)=>a+b,0)
       };
     }
     leaves++;
   }
+}
+// Physical topology audit; PASS means modeled port arithmetic, not vendor certification.
+function auditFabricLayout({be,fe,vn,gbMgmt,gbOob,isGb=false,frontendOver=2,dedicated=false,oob=null}){
+  const checks=[];
+  const add=(domain,status,message)=>checks.push({domain,status,message});
+  if(be)add('Backend',be.portMapVerified?'PASS':'REVIEW',be.portMapVerified?'Modeled whole-link mapping fits.':'No complete port map verified; capacity estimate only.');
+  if(fe && fe.leaves){
+    if(isGb){
+      if(fe.portMapVerified===false)add('Frontend','FAIL','No complete converged mapping fits the modeled two-tier limits.');
+      const host=fe.endpointDist, cages=fe.hostCageDist;
+      const worst=fe.collapsed?0:Math.max(...host.map((n,i)=>n*400/(fe.uplinkDist[i]*800)));
+      if(cages.some((n,i)=>n+(fe.uplinkDist[i]||0)>64))add('Frontend','FAIL','Converged leaf exceeds 64 cages.');
+      if(!fe.collapsed){
+        const pair=fe.uplinkDist[0]*2/fe.spines;
+        add('Frontend',Number.isInteger(pair)&&pair>0&&fe.leaves*pair<=128?'PASS':'REVIEW','Converged mesh: '+fe.leaves+' leaves, '+fe.spines+' spines, '+pair+' logical 400G links per pair.');
+        add('Frontend',worst<=frontendOver?'PASS':'FAIL','Worst leaf oversubscription '+worst.toFixed(3)+':1; selected target '+frontendOver+':1.');
+      }else add('Frontend','REVIEW','Collapsed pair requires external core/handoff capacity and redundancy validation.');
+    }else add('Frontend',fe.portMapVerified?'PASS':'REVIEW','Whole 400G mesh at selected oversubscription '+(fe.portMapVerified?'fits.':'not verified.'));
+  }
+  if(vn && vn.switches){
+    const groups=vn.dist;
+    const uplinks=vn.uplinksPerSwitch.length===vn.switches?vn.uplinksPerSwitch:groups.flatMap((_,i)=>[vn.uplinksPerSwitch[i],vn.uplinksPerSwitch[i]]);
+    const leafFits=groups.every((n,i)=>n+uplinks[2*i]<=32 && n+uplinks[2*i+1]<=32);
+    add('Storage',leafFits?'PASS':'FAIL','Per-storage-leaf host plus uplink occupancy checked against 32 x 400G cages.');
+    const receivingSpines=dedicated?2:fe?.spines||0;
+    const capacity=receivingSpines*(isGb?128:64);
+    const occupied=dedicated?0:(fe?.physicalUplinkLinks||0)*(isGb?2:1);
+    const extra=vn.totalUplinkLinks+(isGb?(gbMgmt?.uplink400Links||0):0);
+    const reserved=fe?.portMapVerified && (fe.external400||0)>=extra;
+    add('Shared spine',receivingSpines && occupied+extra<=capacity?(reserved?'PASS':'REVIEW'):'FAIL','400G port demand '+(occupied+extra)+' / '+capacity+' across receiving spines; '+(reserved?'external capacity reserved in the per-spine cage budget.':'per-peer placement and breakout packing require validation.'));
+  }
+  if(gbMgmt?.leaves){
+    add('Management',Math.ceil(gbMgmt.host200Ports/gbMgmt.leaves/2)+gbMgmt.uplink400Links/gbMgmt.leaves<=32?'PASS':'FAIL','Management-leaf host/uplink cages checked against 32 x 400G ports.');
+    add('Management','REVIEW','Management far-end optics and cables are included; final NIC/optic interoperability and port assignments require qualification.');
+  }
+  if(gbOob){
+    add('OOB',gbOob.spineCapacityExceeded||gbOob.stpCapacityExceeded?'FAIL':'REVIEW','Rack and low-speed uplinks '+(gbOob.rackTor100gLinks+gbOob.lowSpeedUplinkLinks+(gbOob.upstreamLinks||0))+'; selected aggregation capacity '+(gbOob.oobSpines?gbOob.oobSpines*36:'external/STP')+'. Low-speed media and per-device attachment need confirmation.');
+  }else if(oob){
+    add('OOB',oob.capacityExceeded?'FAIL':'PASS','Modeled OOB aggregation port budget '+(oob.capacityExceeded?'exceeded.':'fits; endpoint dual attachment is a separate design choice.'));
+  }
+  return {checks,status:checks.some(c=>c.status==='FAIL')?'FAIL':checks.some(c=>c.status==='REVIEW')?'REVIEW':'PASS'};
 }
 function add(cat,pid,desc,qty,basis,status){
   const pct=window.CURRENT_SPARE_PCT||0;
@@ -2154,7 +2265,7 @@ function calc(){
   }
 
   let be;
-  const makeBackend=n=>platform==='gb300-nvl72'?gb300EastWestDesign(n):backendDesign(n,mode,top,customGpusPerNode,customBackendProfile);
+  const makeBackend=n=>platform==='gb300-nvl72'?gb300EastWestDesign(n):backendDesign(rubinRackPid?n*9:n,mode,top,rubinRackPid?8:customGpusPerNode,customBackendProfile);
   if(suFabric==='independent' && suMode!=='off'){
     const one=makeBackend(suPlan.suNodes);
     be={...one,gpus:nodes*customGpusPerNode,totalGpus:nodes*customGpusPerNode,
@@ -2167,7 +2278,8 @@ function calc(){
       atTwoTierBoundary:one.atTwoTierBoundary,exceedsTwoTier:one.exceedsTwoTier,fabricTier:one.fabricTier,suIndependent:true};
   }else be=makeBackend(nodes);
 
-  const fe=frontendEnabled?(platform==='gb300-nvl72'?gb300ConvergedDesign(nodes):frontendDesign(nodes,mgmt,feLinks,feOver)):zeroFrontend();
+  const computeServerCount=nodes*(rubinRackPid?9:1);
+  const fe=frontendEnabled?(platform==='gb300-nvl72'?gb300ConvergedDesign(nodes,feOver,(vastEnabled?vn.totalUplinkLinks:0)+(mgmtEnabled?4:0)):frontendDesign(computeServerCount,mgmt,feLinks,feOver,vastEnabled&&$('storageSpines').value!=='dedicated'?vn.totalUplinkLinks:0)):zeroFrontend();
   const gb300MgmtFabric=platform==='gb300-nvl72'&&mgmtEnabled?gb300ManagementFabric(mgmt):{leaves:0,host200Ports:0,switchBreakoutOptics:0,uplink400Links:0,hostCables:0};
   let gb300Oob={overrideMode:'auto',selectedMode:'direct',inRackMgmtSwitches:0,rackTor100gLinks:0,rackUplinkSpeedG:100,rackSideOpticPid:'QSFP-100G-DR-S=',aggregationOpticPid:'',aggregationSwitches:0,aggregationPid:'',aggregationLabel:'',aggregationLinks:0,peerLinks:0,rackTorOptics:0,rackTorCables:0,lowSpeedLeaves:0,lowSpeedUplinkLinks:0,oobSpines:0,stpCapacityExceeded:false,storageServerEndpoints:0,managementServerEndpoints:0,ndEndpoints:0,switchMgmtEndpoints:0,externalLowSpeedEndpoints:0};
   const vastCapacityLicenses=vastEnabled?Math.ceil(vc.usableTb):0,vastCoreLicenses=vastEnabled?eq*eboxCpuCores:0,vastInstallServiceQty=vastEnabled?Math.max(1,Math.ceil(eq/12)):0;
@@ -2178,18 +2290,19 @@ function calc(){
     const gb300NetworkSwitches=infra + gb300MgmtFabric.leaves;
     gb300Oob=gb300OobDesign(nodes, vastEnabled?eq:0, mgmtEnabled?mgmt:0, ndNodeCount, gb300NetworkSwitches, $('gb300OobMode')?.value||'auto');
   }
-  const computeOobEndpoints=platform==='gb300-nvl72'?0:nodes;
-  const oobEndpoints=oobEnabled?(computeOobEndpoints+mgmt+infra+(vastEnabled?eq*2:0)+ndNodeCount):0;
-  const oobLeaves=oobEnabled&&platform!=='gb300-nvl72'?Math.max(2,Math.ceil(oobEndpoints/48)):0;
+  const computeOobEndpoints=platform==='gb300-nvl72'?0:computeServerCount;
+  const baseOobEndpoints=oobEnabled?(computeOobEndpoints+mgmt+infra+(vastEnabled?eq*2:0)+ndNodeCount):0;
   const oobFabricMode=$('oobFabricMode')?.value||'stp1g';
+  const genericOob=oobEnabled&&platform!=='gb300-nvl72'?genericOobPlan(baseOobEndpoints,oobFabricMode):{leaves:0,endpoints:baseOobEndpoints};
+  const oobEndpoints=genericOob.endpoints,oobLeaves=genericOob.leaves;
   // Small OOB remains a flat redundant leaf pair. Above two leaves the user can choose:
   // 1) simple L2 1GBASE-T STP aggregation using the same N93108TC-FX3 platform, or
   // 2) the original 40G N9336C-SE1 spine design.
   const stpLeavesPerAggPair=47; // 48 copper ports less one inter-aggregator STP link
   const oobAggPairs=oobEnabled&&oobLeaves>2&&oobFabricMode==='stp1g'?Math.ceil(oobLeaves/stpLeavesPerAggPair):0;
   const oobAggregators=oobAggPairs*2;
-  const oobSpines=oobEnabled&&oobLeaves>2&&oobFabricMode==='spine40g'?2:0;
-  const oobSpineCapacityExceeded=oobEnabled&&oobFabricMode==='spine40g'&&oobLeaves>36;
+  const oobSpines=oobEnabled&&oobLeaves>2&&oobFabricMode==='spine40g'?2*Math.ceil(oobLeaves/35):0;
+  const oobSpineCapacityExceeded=oobEnabled&&oobFabricMode==='spine40g'&&Math.ceil(oobLeaves/(oobSpines/2||1))>35;
   const oobLeafSpineLinks=oobSpines?oobLeaves*2:0;
   const oobLeafSpineOptics=oobLeafSpineLinks*2;
   const oobStpLeafLinks=oobAggregators?oobLeaves*2:0;
@@ -2211,12 +2324,12 @@ function calc(){
         ? `Direct OOB/core handoff selected. The ${gb300Oob.inRackMgmtSwitches} in-rack N93108TC-FX3 switches uplink directly to the customer's OOB/core; no extra Cisco OOB aggregation switches are added.`
         : gb300Oob.selectedMode==='stp'
           ? `Simple Layer-2/STP aggregation selected. Add a redundant <b>N93108TC-FX3</b> aggregation pair. This option is allowed only for up to 2 NVL72 racks.`
-          : `Spine-leaf OOB selected. Rack-management uplinks are modeled into a redundant <b>N9336C-SE1</b> spine pair using 100G uplinks.`;
+          : `Spine-leaf OOB selected. Rack-management uplinks are modeled into redundant <b>N9336C-SE1</b> routed spine blocks using 100G uplinks.`;
       $('oobPolicyNote').innerHTML=`<b>GB300 SE override:</b> ${forced}${modeText}`;
     }else{
       $('oobPolicyNote').innerHTML=oobFabricMode==='stp1g'
         ? `Simple Layer-2 OOB selected: native <b>1GBASE-T copper</b> from N93108TC-FX3 leaves to redundant N93108TC-FX3 aggregators. STP controls the redundant path. No uplink transceivers are required; use appropriate copper patch cabling.`
-        : `High-speed OOB selected: N93108TC-FX3 leaves are dual-homed to a redundant <b>N9336C-SE1 40G spine pair</b> using QSFP-40G-SR4-S= optics.`;
+        : `High-speed OOB selected: N93108TC-FX3 leaves are dual-homed to redundant <b>N9336C-SE1 40G routed spine blocks</b> using QSFP-40G-SR4-S= optics.`;
     }
   }
   const theoreticalTwoTierGpuBoundary=be.gb300Nvl72Ra?8192:Math.floor((51200/be.speed)*(25600/be.speed)/(be.logicalPerGpu/be.planes));
@@ -2524,7 +2637,7 @@ function calc(){
   const opticFamily=backendOpticIsVr8?'VR8':'DR8';
   const switchBreakoutDesc=be.speed===200?`800G ${opticFamily} switch-side host-facing 4×200G breakout optic`:be.speed===400?`800G ${opticFamily} switch-side host-facing 2×400G breakout optic`:`800G ${opticFamily} switch-side host-facing optic`;
   add('AI Backend Optics',backendOpticPid,switchBreakoutDesc,be.switchHostOptics,`${backendOpticMedia} · ${backendOpticReach} · 800G-equivalent cages rounded independently on each leaf/plane`,tmgStatus(pid,backendOpticPid));
-  add('AI Backend Optics',backendOpticPid,`800G ${opticFamily} leaf-spine optical endpoint`,be.leafSpineOptics,`${be.physicalLeafSpineLinks} 800G-equivalent links × 2 endpoints · ${be.logicalLeafSpineLinks||0} logical ${be.speed}G links · ${backendOpticMedia} · ${backendOpticReach}`,tmgStatus(pid,backendOpticPid));
+  add('AI Backend Optics',backendOpticPid,`800G ${opticFamily} leaf-spine optical endpoint (breakout as required)`,be.leafSpineOptics,`${be.physicalLeafSpineLinks} 800G-equivalent links × 2 endpoints · ${be.logicalLeafSpineLinks||0} logical ${be.speed}G links · ${backendOpticMedia} · ${backendOpticReach}`,tmgStatus(pid,backendOpticPid));
   if(be.gb300Nvl72Ra){
     add('AI Backend Cabling','CB-M12-M12-SMF','MPO-12 to MPO-12 SMF cable — CX-8 host to backend leaf',be.hostLeafCables,`${be.gpus} active CX-8 host optics × 2 plane cables`,'Cisco GB300 NVL72 RA cable model');
     add('AI Backend Cabling','CB-M12-M12-SMF','MPO-12 to MPO-12 SMF cable — backend leaf to spine',be.leafSpineCables,`${be.physicalLeafSpineLinks} physical 800G DR8 links × 2 MPO-12 cables`,'Cisco GB300 NVL72 RA cable model');
@@ -2543,7 +2656,7 @@ function calc(){
       }else{
         add('Converged Compute Leaf','N9364E-SG2X-O','GB300 North-South / converged compute leaf',fe.leaves,
           `${fe.host400Ports} × 400G BlueField-3 ports across ${nodes} active racks`,
-          'Cisco GB300 NVL72 Enterprise RA');
+          'Derived port-mapped design; validate Cisco/OEM qualification');
         add('Converged Compute Spine','N9364E-SG2X-O','GB300 converged spine',fe.spines,
           `${fe.leaves} compute leaves; 16×400G-equivalent uplinks/leaf`,
           'Cisco GB300 NVL72 Enterprise RA');
@@ -2571,6 +2684,8 @@ function calc(){
       }
 
       if(mgmtEnabled){
+        add('Management Converged Optics','OSFP-800G-DR8=','800G receiving optic for 2x400G management uplinks',Math.ceil(gb300MgmtFabric.uplink400Links/2),'Two 400G branches per optic; reserved on converged receiving tier','Validate final per-peer breakout and management interoperability');
+        add('Management Fabric Cabling','CB-M12-M12-SMF','MPO-12 SMF management/converged cable',gb300MgmtFabric.uplink400Links,'One cable per management 400G branch','Validate exact assembly and reach');
         add('Management Fabric Leaf','N9K-C9332D-GX2B','Dedicated high-speed management leaf',gb300MgmtFabric.leaves,
           `${mgmt} management/control nodes · dual 200G/node`,
           'Cisco GB300 NVL72 RA management leaf pattern');
@@ -2636,7 +2751,7 @@ function calc(){
           'SE-selected simple OOB aggregation');
       }else{
         add('GB300 OOB Spine','N9336C-SE1','100G OOB spine switch',gb300Oob.oobSpines,
-          `${gb300Oob.rackTor100gLinks} rack-management uplinks into a redundant spine pair`,
+          `${gb300Oob.rackTor100gLinks} rack-management links across ${gb300Oob.oobSpines/2} redundant routed blocks; one upstream port reserved per spine`,
           gb300Oob.guardrailForced?'GB300 OOB guardrail: spine-leaf required above 2 racks':'SE-selected spine-leaf OOB design');
       }
 
@@ -2655,7 +2770,13 @@ function calc(){
         `${gb300Oob.externalLowSpeedEndpoints} low-speed endpoints: storage ${gb300Oob.storageServerEndpoints}, management ${gb300Oob.managementServerEndpoints}, Nexus Dashboard ${gb300Oob.ndEndpoints}, switch management ${gb300Oob.switchMgmtEndpoints}`,
         'Secure AI Factory OOB management');
 
-      add('GB300 Low-Speed OOB Uplinks','OOB-UPLINK-PLANNING','Low-speed OOB uplinks',gb300Oob.lowSpeedUplinkLinks,
+      if(gb300Oob.selectedMode==='spine'){
+        add('GB300 Low-Speed OOB Optics','QSFP-40G-SR4-S=','40G OOB leaf/spine optical endpoint',gb300Oob.lowSpeedUplinkLinks*2,gb300Oob.lowSpeedUplinkLinks+' dual-homed 40G links; both optical ends','TMG-qualified leaf/SE1 family; validate reach');
+        add('GB300 Low-Speed OOB Cabling','CB-M12-M12-MMF','MPO-12 MMF OOB leaf/spine cable',gb300Oob.lowSpeedUplinkLinks,'One cable per 40G link','Validate exact cable assembly and reach');
+        add('GB300 OOB Core Optics','QSFP-100G-DR-S=','100G OOB upstream optical endpoint',gb300Oob.upstreamLinks*2,gb300Oob.upstreamLinks+' routed upstream links, one per spine, to redundant customer OOB core; both optical ends','SE1 family qualified; customer-core compatibility and routing required');
+        add('GB300 OOB Core Cabling','CB-LC-LC-SMF','LC SMF routed OOB core handoff',gb300Oob.upstreamLinks,'One upstream link per spine; customer OOB/core ports required','Customer-core handoff, not an included core switch');
+      }
+      if(gb300Oob.selectedMode!=='spine')add('GB300 Low-Speed OOB Uplinks','OOB-UPLINK-PLANNING','Low-speed OOB uplinks',gb300Oob.lowSpeedUplinkLinks,
         gb300Oob.selectedMode==='direct'
           ? `${gb300Oob.lowSpeedLeaves} leaves × 2 uplinks to customer OOB/core`
           : `${gb300Oob.lowSpeedLeaves} leaves × 2 uplinks to the selected OOB aggregation tier`,
@@ -2676,9 +2797,13 @@ function calc(){
       add('OOB Management Aggregator','N9K-C93108TC-FX3','48-port 1/10GBASE-T Layer-2 OOB aggregation switch',oobAggregators,`${oobLeaves} OOB leaves dual-homed with 1GBASE-T copper; ${oobAggPairs} redundant aggregation pair(s); STP provides loop control; one peer link reserved per pair`,'Simple OOB Layer-2 planning; native copper ports, no optical transceivers required');
     }
     if(oobSpines){
-      add('OOB Management Spine','N9336C-SE1','36-port 40/100G QSFP28 OOB aggregation spine',oobSpines,`${oobLeaves} OOB leaves dual-homed to redundant spine pair; max 36 leaves per spine pair`,'Cisco N9336C-SE1 datasheet + scalable OOB planning');
+      add('OOB Management Spine','N9336C-SE1','36-port 40/100G QSFP28 OOB aggregation spine',oobSpines,`${oobLeaves} OOB leaves across ${oobSpines/2} redundant routed blocks; max 35 leaves per pair plus one upstream port/spine`,'Cisco N9336C-SE1 datasheet + scalable OOB planning');
       add('OOB Management Optics','QSFP-40G-SR4-S=','40GBASE-SR4-S QSFP+ MMF optic',oobLeafSpineOptics,`${oobLeafSpineLinks} physical 40G links × 2 endpoints`,tmgQualified('N9K-C93108TC-FX3','QSFP-40G-SR4-S=')&&tmgQualified('N9336C-SE1','QSFP-40G-SR4-S=')?'TMG qualified on OOB leaf and spine':'TMG validation required');
     }
+  }
+  if(oobSpines){
+    add('OOB Core Optics','QSFP-40G-SR4-S=','40G OOB routed upstream optical endpoint',oobSpines*2,oobSpines+' upstream links, one per spine, to redundant customer core; both optical ends','SE1 family qualified; validate customer-core compatibility and routing');
+    add('OOB Core Cabling','CB-M12-M12-MMF','MPO-12 MMF OOB core handoff',oobSpines,'One upstream port reserved per spine; customer core ports required','Validate exact cable assembly and reach');
   }
   if(ndEnabled){
     add('Nexus Dashboard','ND-CLUSTERG5S','Three-node Nexus Dashboard physical appliance cluster',1,'3 primary ND-NODE-G5S appliances','Cisco Nexus Dashboard 4.1/4.2 deployment guide');
@@ -2748,6 +2873,7 @@ function calc(){
   if(isCustom)q.push(`<b class="good">CUSTOM</b> ${nodes} servers × ${customGpusPerNode} ${gpuModel}/server = ${be.gpus} GPUs; backend requirement ${be.backendLabel} (${be.physicalHostLinks} host links total).`);
   if(vastEnabled)q.push(`<b class="good">CCW ACTION</b> VAST hierarchy: add VAST-DATA-MLB → confirm ${eq} × UCSC-C225M8N-EBOX and VAST Nexus hardware children → select VAST-DATA-SPLUS → configure ${vastCapacityLicenses} × VAST-SW-1TB, ${vastCoreLicenses} × VAST-SW-1CPU-CORE, VAST-PS-COPILOT, and ${vastInstallServiceQty} × VAST-PS.`);
 
+  if(rubinRackPid)q.push('<b class="good">RUBIN NVL8 SERVER COUNT</b> '+nodes+' rack units x 9 eight-GPU servers = '+computeServerCount+' servers; frontend and compute OOB endpoints use the enclosed server count.');
   if(isAmdMi355x){
     const amdGpuPerNic=8/amdNicsPerServer;
     q.push(`<b class="good">AMD MI355X PROFILE</b> ${nodes} servers × 8 GPUs = ${be.gpus} MI355X GPUs. Backend demand is driven by the configured <b>${amdNicsPerServer}×${amdNicSpeed}G RoCE links/server</b> across ${amdFabricPlanes} plane${amdFabricPlanes===1?'':'s'} (${amdGpuPerNic.toFixed(2).replace(/\.00$/,'')} GPU/NIC planning ratio), not by an NVIDIA NIC template. Spectrum-X is not required. Exact OEM NIC, host optic/cable and server physical specifications remain validation items.`);
@@ -2779,6 +2905,9 @@ function calc(){
     q.push(`<b class="good">PASS</b> CVD scale point: 256 GPUs / 32 nodes reuses the fully populated 4-leaf + 2-spine per-plane block.`);
   if(!isCustom && mode==='dual400' && top==='rail' && nodes===64 && be.leavesPerPlane===8 && be.spinesPerPlane===4)
     q.push(`<b class="good">PASS</b> 512-GPU sizing: 64 nodes = 8 leaves + 4 spines per plane (16 leaves + 8 spines total).`);
+  if(frontendEnabled && fe.portMapVerified===false)q.push('<b class="bad">FRONTEND PORT MAP REVIEW</b> Frontend quantities are capacity estimates; a complete whole-link mesh at the selected oversubscription does not fit.');
+  if(be.portMapVerified===false)q.push('<b class="bad">PORT MAP REVIEW REQUIRED</b> This BOM is a capacity estimate. A complete whole-link mapping has not been verified; do not treat it as a deployable nonblocking fabric.');
+  if(be.portMapVerified && be.meshLinksPerPair)q.push('<b class="good">PORT MAP</b> Each leaf connects to every spine with '+be.meshLinksPerPair+' x '+be.meshLinkSpeedG+'G logical links per pair. Breakout branches may terminate on different peers; validate exact cabling and interoperability.');
   if(be.gb300DerivedThreeTier){
     q.push(`<b class="${be.derivedCapacityExceeded?'bad':'warn'}">${be.derivedCapacityExceeded?'CAPACITY EXCEEDED':'DERIVED THREE-TIER'}</b> GB300 E-W: ${be.spinesPerPlane} spines and ${be.superspinesPerPlane} superspines per plane. Each local spine uses 24×800G down and 24×800G up. ${be.derivedCapacityExceeded?'Deployment exceeds this derived layout\'s 128-rack capacity; do not use this BOM as a complete design.':'Whole-link distribution fits the 64-cage switch budget with 1:1 bandwidth.'} This is an engineering derivation; validate with Cisco BU/OEM.`);
   }else if(be.exceedsTwoTier){
@@ -2787,10 +2916,10 @@ function calc(){
       ? 'Validate the multi-pod / superspine design with Cisco, AMD, and the selected server/NIC vendor; inter-pod oversubscription is not auto-assumed.'
       : 'Engage BU/CVD/NVIDIA for multi-pod / superspine design; inter-pod oversubscription is not auto-assumed.';
     const scaleReviewProfile=isAmdMi355x?` The configured ${amdNicsPerServer}×${amdNicSpeed}G/server profile across ${amdFabricPlanes} plane${amdFabricPlanes===1?'':'s'} drives this result.`:'';
-    q.push(`<b class="warn">${scaleReviewLabel}</b> ${be.gpus} GPUs requires ${be.leavesPerPlane} leaves/plane, beyond the ${TWO_TIER_LEAF_LIMIT_PER_PLANE}-leaf theoretical 2-tier boundary.${scaleReviewProfile} ${scaleReviewAction}`);
+    q.push(`<b class="warn">${scaleReviewLabel}</b> ${be.gpus} GPUs requires ${be.leavesPerPlane} leaves/plane, which does not fit the modeled complete two-tier mesh at the selected link speed.${scaleReviewProfile} ${scaleReviewAction}`);
   }
   else if(be.atTwoTierBoundary)q.push(`<b class="warn">BOUNDARY</b> ${be.gpus} GPUs is at the theoretical ${theoreticalTwoTierGpuBoundary}-GPU / ${TWO_TIER_LEAF_LIMIT_PER_PLANE}-leaf-per-plane 2-tier boundary. Additional scale triggers architecture review.`);
-  else q.push(`<b class="good">PASS</b> Backend remains within the theoretical 2-tier leaf/spine port-capacity envelope; superspine is not required.`);
+  else if(be.portMapVerified!==false)q.push(`<b class="good">PASS</b> Backend remains within the theoretical 2-tier leaf/spine port-capacity envelope; superspine is not required.`);
   if(suMode==='cvd4')q.push(`<b class="good">PASS</b> CVD scale-unit enforcement: ${suPlan.suCount} × 4-node / 32-GPU SUs.`);
   if(suMode==='custom')q.push(`<b class="warn">CHECK</b> Custom ${suPlan.suNodes}-node SU is an engineering planning group; validate against the applicable Cisco/NVIDIA CVD.`);
   if(suPlan.rounded)q.push(`<b class="warn">CHECK</b> Requested ${requestedNodes} nodes rounded up to ${nodes} deployed nodes to satisfy whole-SU enforcement.`);
@@ -2860,7 +2989,14 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
     q.push(`<b class="bad">Regression failures:</b><br>`+regression.failures.slice(0,20).map(x=>`• ${x.name}: ${x.detail}`).join('<br>'));
   }
 
+  const layoutAudit=auditFabricLayout({be,fe:frontendEnabled?fe:null,vn:vastEnabled?vn:null,gbMgmt:platform==='gb300-nvl72'&&mgmtEnabled?gb300MgmtFabric:null,gbOob:platform==='gb300-nvl72'&&oobEnabled?gb300Oob:null,isGb:platform==='gb300-nvl72',frontendOver:feOver,dedicated,oob:oobEnabled?{capacityExceeded:oobSpineCapacityExceeded}:null});
+  layoutAudit.checks.forEach(c=>q.push('<b class="'+(c.status==='FAIL'?'bad':c.status==='REVIEW'?'warn':'good')+'">LAYOUT '+c.status+'</b> '+c.domain+': '+c.message));
+  const layoutIssues=layoutAudit.checks.filter(c=>c.status!=='PASS').map(c=>c.domain+': '+c.message).join(' / ');
+  if(layoutAudit.status!=='PASS')BOM.forEach(row=>{
+    if(/Backend|Frontend|Converged|VAST.*Optic|OOB|Management.*Uplink/.test(row.cat))row.basis=(row.basis||'')+' | LAYOUT '+layoutAudit.status+': '+layoutIssues;
+  });
   window.DESIGN_STATE={
+    layoutAudit,
     customer: String($('customerName')?.value||'').trim() || 'Customer',
     generatedAt: new Date().toLocaleDateString(),
     assumptions:{
@@ -2877,7 +3013,7 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
         backendBandwidthLabel:be.backendLabel,
         backendPlanes:be.planes,
         backendTopology:top==='rail'?'Rail-optimized':'Classic',
-        nonBlocking:!!be.ciscoCx8DualRA || true,
+        nonBlocking:be.portMapVerified===true,
         frontendLinksPerNode:frontendEnabled?feLinks:0,
         frontendOversubscription:frontendEnabled?feOver:null,
         media:backendOpticMedia,
@@ -2920,6 +3056,7 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
       gpuModel:gpuModel,
       gpusPerUnit:customGpusPerNode,
       units:nodes,
+      serverCount:platform==='gb300-nvl72'?null:computeServerCount,
       computePowerKw:computePowerW/1000,
       computeMlb:computeCcw?computeMlb:'',
       computeAto:computeCcw?computeAto:''
@@ -2934,6 +3071,9 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
       leavesPerPlane:be.leavesPerPlane,
       spinesPerPlane:be.spinesPerPlane,
       backendLabel:be.backendLabel,
+      portMapVerified:be.portMapVerified===true,
+      meshLinkSpeedG:be.meshLinkSpeedG||null,
+      meshLinksPerPair:be.meshLinksPerPair||null,
       hostLinks:be.physicalHostLinks,
       fabricRacks:be.fabricRacks||nodes,
       fabricGpus:be.fabricGpus||be.gpus,
@@ -2946,10 +3086,14 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
     },
     frontend:{
       enabled:frontendEnabled,
+      portMapVerified:frontendEnabled?fe.portMapVerified===true:null,
       linksPerNode:frontendEnabled?feLinks:0,
       leaves:frontendEnabled?fe.leaves:0,
       spines:frontendEnabled?fe.spines:0,
       oversubscription:frontendEnabled?feOver:null,
+      meshLinkSpeedG:fe.meshLinkSpeedG||null,
+      meshLinksPerPair:fe.meshLinksPerPair||null,
+      externalPortDist:fe.externalPortDist||[],
       gb300Nvl72Ra:!!fe.gb300Nvl72Ra,
       host400Ports:fe.host400Ports||0,
       hostCables:fe.hostCables||0,
@@ -2973,10 +3117,12 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
       childPid:mgmtEnabled?mgmtServerPid:'',
       roleSplit:mgmtEnabled?'3 × OpenShift control plane + 2 × BCM head nodes':'Disabled',
       oobEnabled:oobEnabled,
-      oobLeaves:oobEnabled?oobLeaves:0,
-      oobSpines:oobEnabled?oobSpines:0,
+      oobLeaves:oobEnabled?(platform==='gb300-nvl72'?gb300Oob.inRackMgmtSwitches+gb300Oob.lowSpeedLeaves:oobLeaves):0,
+      oobSpines:oobEnabled?(platform==='gb300-nvl72'?gb300Oob.oobSpines:oobSpines):0,
+      upstreamLinks:oobEnabled?(platform==='gb300-nvl72'?gb300Oob.upstreamLinks||0:oobSpines):0,
+      oobPairBlocks:platform==='gb300-nvl72'?gb300Oob.pairBlocks||[]:[],
       oobAggregators:oobEnabled?oobAggregators:0,
-      oobEndpoints:oobEnabled?oobEndpoints:0
+      oobEndpoints:oobEnabled?(platform==='gb300-nvl72'?gb300Oob.externalLowSpeedEndpoints:oobEndpoints):0
     },
     scale:{
       enabled:suMode!=='off',
@@ -3474,7 +3620,7 @@ async function exportDesignPptx(){
       pptCard(s,.75,5.42,2.0,.88,'Control plane','3 nodes','Default control quorum');
       pptCard(s,3.0,5.42,2.0,.88,'Management','2 nodes','HA head nodes');
       pptCard(s,5.25,5.42,2.0,.88,'OOB leaves',d.management.oobLeaves,'Mgmt switches');
-      pptCard(s,7.5,5.42,1.75,.88,'Total',d.management.nodes,'Control nodes');
+      pptCard(s,7.5,5.42,1.75,.88,'OOB spines',d.management.oobSpines,'Routed core handoffs: '+(d.management.upstreamLinks||0));
       pptAddFooter(s,d);
     };
     const addScale=()=>{
