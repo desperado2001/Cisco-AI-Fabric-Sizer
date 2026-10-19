@@ -1,5 +1,14 @@
 # Physical network layout verification — 2026-10-19
 
+## Optical OOB standard: 100G ? 2026-10-19
+
+Optical OOB leaf-to-spine and routed core links now use 100G across GB300 rack-scale and generic MI355X/HGX/NVL8 profiles. The default generic aggregation policy is now spine100g; the explicitly selected 1G copper/STP override remains available. Legacy spine40g helper inputs migrate to the 100G policy.
+
+BOM optical endpoints use QSFP-100G-DR-S= and duplex LC UPC single-mode fiber (CB-LC-LC-SMF planning cable family). Shared GB300 management uplinks no longer use 40G SR4/MMF. Link, switch, reserved-port and routed-block counts are unchanged. The 70-rack example still has 20 shared-management uplinks, 40 leaf/spine optic endpoints, ten core handoffs and 20 core optic endpoints, now all 100G. Copper endpoint ports remain 1/10G.
+
+Cisco's FX3 datasheet confirms six 40/100G QSFP28 ports: https://www.cisco.com/c/en/us/products/collateral/switches/nexus-9000-series-switches/datasheet-c78-744052.html . Exact FX3 QSFP-100G-DR-S / software qualification remains explicitly unverified; existing SE1 qualification evidence is not generalized to the leaf. Customer-core compatibility and reach also remain qualification items. All 35 local tests pass, including executed OOB BOM rows and legacy policy migration.
+
+
 ## NVL8 and MI355X profile recheck ? 2026-10-19
 
 The modeled full Rubin NVL8 rack contains nine eight-GPU servers. Backend rail sizing now normalizes each such rack to nine servers, and frontend/OOB endpoint counts use those enclosed servers. Previously backend rail grouping used rack units while frontend and OOB counted only one server per rack. GPU totals and rack-level facility inputs remain based on the selected rack configuration.

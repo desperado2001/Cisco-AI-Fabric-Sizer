@@ -128,7 +128,7 @@ test('GB300 OOB block maps conserve every rack and leaf and reserve upstream por
 });
 
 test('generic OOB includes its own management and scales optical aggregation blocks',()=>{
-  for(const endpoints of [0,47,48,95,96,600,1680,1728,10000])for(const mode of ['stp1g','spine40g']){
+  for(const endpoints of [0,47,48,95,96,600,1680,1728,10000])for(const mode of ['stp1g','spine100g']){
     const d=api.genericOobPlan(endpoints,mode);
     assert.equal(d.endpoints,endpoints+d.leaves+d.spines+d.aggregators);
     assert.ok(d.leaves*48>=d.endpoints);
@@ -159,7 +159,7 @@ test('NVL8 and AMD profile fixtures preserve physical NIC counts and per-plane b
     assert.equal(frontend.endpoints,(n+5)*2);
     assert.equal(frontend.portMapVerified,true);
     const infra=d.totalLeaves+d.totalSpines+frontend.leaves+frontend.spines+storage.switches;
-    const oob=api.genericOobPlan(n+5+infra+24+3,'spine40g');
+    const oob=api.genericOobPlan(n+5+infra+24+3,'spine100g');
     assert.ok(oob.leaves*48>=oob.endpoints);
     if(oob.spines)assert.ok(Math.ceil(oob.leaves/(oob.spines/2))<=35);
   }
@@ -190,4 +190,23 @@ test('Rubin NVL8 full racks use the same networking as nine eight-GPU servers pe
   assert.equal(count(70,false),70);
   assert.match(html,/frontendDesign\(computeServerCount,mgmt/);
   assert.match(html,/computeOobEndpoints=platform==='gb300-nvl72'\?0:computeServerCount/);
+});
+
+test('optical OOB uses 100G DR optics and duplex LC SMF for both leaf and core paths',()=>{
+  const d=api.gb300OobDesign(70,12,5,3,400);
+  assert.equal(d.lowSpeedUplinkSpeedG,100);
+  assert.equal(d.rackUplinkSpeedG,100);
+  assert.equal(api.genericOobPlan(600).uplinkSpeedG,100);
+  assert.deepEqual(api.genericOobPlan(600,'spine40g'),api.genericOobPlan(600,'spine100g'));
+  assert.match(html,/<option value="spine100g" selected>100G spine fabric/);
+  const begin=html.indexOf("      if(gb300Oob.selectedMode==='spine'){\n        add('GB300 Low-Speed OOB Optics'");
+  const end=html.indexOf("      if(gb300Oob.selectedMode!=='spine')",begin);
+  assert.ok(begin>0&&end>begin);
+  const rows=[];
+  new Function('gb300Oob','add',html.slice(begin,end))(d,(cat,pid,desc,qty)=>rows.push({cat,pid,desc,qty}));
+  assert.equal(rows.length,4);
+  assert.deepEqual(rows.map(r=>r.pid),['QSFP-100G-DR-S=','CB-LC-LC-SMF','QSFP-100G-DR-S=','CB-LC-LC-SMF']);
+  assert.deepEqual(rows.map(r=>r.qty),[d.lowSpeedUplinkLinks*2,d.lowSpeedUplinkLinks,d.upstreamLinks*2,d.upstreamLinks]);
+  const oobRows=html.split('\n').filter(line=>/add\('.*OOB/.test(line));
+  assert.ok(oobRows.every(line=>!line.includes('QSFP-40G-SR4-S=')&&!line.includes('CB-M12-M12-MMF')));
 });

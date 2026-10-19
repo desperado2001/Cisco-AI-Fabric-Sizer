@@ -333,8 +333,8 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
     <div class="grid2">
       <div><label>OOB leaf platform</label><input value="N9K-C93108TC-FX3" disabled></div>
       <div><label>OOB aggregation policy</label><select id="oobFabricMode" onchange="calc()">
-        <option value="stp1g" selected>1G STP aggregation — N93108TC-FX3</option>
-        <option value="spine40g">40G spine fabric — N9336C-SE1</option>
+        <option value="stp1g">1G STP aggregation — N93108TC-FX3</option>
+        <option value="spine100g" selected>100G spine fabric — N9336C-SE1</option>
       </select></div>
       <div id="gb300OobModeWrap" style="display:none"><label>GB300 OOB SE override</label><select id="gb300OobMode" onchange="calc()">
         <option value="auto" selected>Auto — direct handoff ≤2 racks; spine-leaf required above 2</option>
@@ -449,7 +449,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
   QDD-400G-SR8-S= on N9K-C9332D-GX2B / N9K-C9364D-GX2A;
   QDD-400G-DR4-S= on N9K-C9332D-GX2B / N9K-C9364D-GX2A;
   QSFP-200G-SR4-S= on N9K-C9332D-GX2B;
-  OOB spine: N9336C-SE1, 36×40/100G ports. QSFP-40G-SR4-S= (MPO-12 UPC / MMF) and QSFP-100G-DR-S= (duplex LC UPC / SMF) are TMG-qualified on SE1 from NX-OS 10.6(1), per the supplied Cisco TMG screenshots.
+  OOB spine: N9336C-SE1, 36×40/100G ports. QSFP-100G-DR-S= (MPO-12 UPC / MMF) and QSFP-100G-DR-S= (duplex LC UPC / SMF) are TMG-qualified on SE1 from NX-OS 10.6(1), per the supplied Cisco TMG screenshots.
   <b>NVIDIA proportional scaling:</b> v74 treats the published 512/1,024/8,192/10,240/16,384/32,768-GPU designs as validation anchors rather than hard SU buckets. Shared fabrics interpolate leaf and spine counts from actual GPU-port demand while preserving the documented anchor results and 8,192-GPU two-tier boundary.<br>
   <b>NVIDIA 8K two-tier anchor:</b> v73 explicitly regression-checks the supplied Cisco B300/ConnectX-8 dual-plane reference architecture at 5,040 and 8,192 GPUs without superspine.<br>
   <b>AMD large-scale validation:</b> v71 removes the NVIDIA-specific architecture-review wording from MI355X results. Designs beyond the modeled 2-tier boundary now call for Cisco/AMD/OEM validation while keeping the capacity guardrail intact.<br>
@@ -1142,16 +1142,17 @@ function oobPairPlan(racks,lowSpeedLeaves){
   }
   return {blocks,spines:blocks.length*2,upstreamLinks:blocks.length*2};
 }
-function genericOobPlan(endpoints,mode='stp1g'){
+function genericOobPlan(endpoints,mode='spine100g'){
+  if(mode==='spine40g')mode='spine100g'; // migrate legacy saved policy names
   let leaves=Math.max(2,Math.ceil(endpoints/48)),spines=0,aggregators=0,total=endpoints;
   for(let i=0;i<32;i++){
-    spines=leaves>2&&mode==='spine40g'?2*Math.ceil(leaves/35):0;
+    spines=leaves>2&&mode==='spine100g'?2*Math.ceil(leaves/35):0;
     aggregators=leaves>2&&mode==='stp1g'?2*Math.ceil(leaves/47):0;
     total=endpoints+leaves+spines+aggregators;
     const next=Math.max(2,Math.ceil(total/48));
     if(next===leaves)break;leaves=next;
   }
-  return {leaves,spines,aggregators,endpoints:total,upstreamLinks:spines};
+  return {leaves,spines,aggregators,endpoints:total,upstreamLinks:spines,uplinkSpeedG:100};
 }
 function gb300ManagementFabric(mgmtNodes){
   const nodes=Math.max(0,Math.ceil(mgmtNodes||0));
@@ -1255,7 +1256,7 @@ function gb300OobDesign(activeRacks,storageServers=0,managementServers=0,ndNodes
     aggregationSwitches,aggregationPid,aggregationLabel,aggregationLinks,peerLinks,
     rackTorOptics,rackTorCables,
     storageServerEndpoints,managementServerEndpoints,ndEndpoints,switchMgmtEndpoints,
-    externalLowSpeedEndpoints,lowSpeedLeaves,lowSpeedUplinkLinks,
+    externalLowSpeedEndpoints,lowSpeedLeaves,lowSpeedUplinkLinks,lowSpeedUplinkSpeedG:100,
     pairBlocks:pairPlan?.blocks||[],upstreamLinks:pairPlan?.upstreamLinks||0,upstreamPortsPerSpine:pairPlan?1:0,
     oobSpines,stpCapacityExceeded,stpUsable100gPortsPerPair,
     spineCapacityExceeded:selectedMode==='spine' && (!pairPlan || pairPlan.blocks.some(b=>b.ports+1>36)),
@@ -2055,8 +2056,8 @@ function topologyVisual(ctx){
     svg += box(430,oobY,340,42,`${oobLeaves} × OOB Leafs`,`${oobEndpoints} endpoints · dual 1G copper uplinks · STP redundant path`,'#94a3b8','#111827',10);
     svg += `<path d="M 600 ${oobY-10} L 600 ${oobY}" fill="none" stroke="#64748b" stroke-width="1.8"/>`;
   }else if(oobSpines>0){
-    svg += box(430,oobY-48,340,38,`${oobSpines} × OOB Spines`, 'N9336C-SE1 · 40G leaf-spine','#94a3b8','#111827',10);
-    svg += box(430,oobY,340,42,`${oobLeaves} × OOB Leafs`,`${oobEndpoints} endpoints · N93108TC-FX3 · dual 40G uplinks`,'#94a3b8','#111827',10);
+    svg += box(430,oobY-48,340,38,`${oobSpines} × OOB Spines`, 'N9336C-SE1 · 100G leaf-spine','#94a3b8','#111827',10);
+    svg += box(430,oobY,340,42,`${oobLeaves} × OOB Leafs`,`${oobEndpoints} endpoints · N93108TC-FX3 · dual 100G uplinks`,'#94a3b8','#111827',10);
     svg += `<path d="M 600 ${oobY-10} L 600 ${oobY}" fill="none" stroke="#64748b" stroke-width="1.8"/>`;
   }else{
     svg += box(430,oobY,340,42,`${oobLeaves} × OOB Leafs (Flat Pair)`,`${oobEndpoints} management endpoints · no dedicated OOB aggregation tier`,'#94a3b8','#111827',10);
@@ -2292,17 +2293,17 @@ function calc(){
   }
   const computeOobEndpoints=platform==='gb300-nvl72'?0:computeServerCount;
   const baseOobEndpoints=oobEnabled?(computeOobEndpoints+mgmt+infra+(vastEnabled?eq*2:0)+ndNodeCount):0;
-  const oobFabricMode=$('oobFabricMode')?.value||'stp1g';
+  const oobFabricMode=$('oobFabricMode')?.value||'spine100g';
   const genericOob=oobEnabled&&platform!=='gb300-nvl72'?genericOobPlan(baseOobEndpoints,oobFabricMode):{leaves:0,endpoints:baseOobEndpoints};
   const oobEndpoints=genericOob.endpoints,oobLeaves=genericOob.leaves;
   // Small OOB remains a flat redundant leaf pair. Above two leaves the user can choose:
   // 1) simple L2 1GBASE-T STP aggregation using the same N93108TC-FX3 platform, or
-  // 2) the original 40G N9336C-SE1 spine design.
+  // 2) standardized 100G N9336C-SE1 routed spine blocks.
   const stpLeavesPerAggPair=47; // 48 copper ports less one inter-aggregator STP link
   const oobAggPairs=oobEnabled&&oobLeaves>2&&oobFabricMode==='stp1g'?Math.ceil(oobLeaves/stpLeavesPerAggPair):0;
   const oobAggregators=oobAggPairs*2;
-  const oobSpines=oobEnabled&&oobLeaves>2&&oobFabricMode==='spine40g'?2*Math.ceil(oobLeaves/35):0;
-  const oobSpineCapacityExceeded=oobEnabled&&oobFabricMode==='spine40g'&&Math.ceil(oobLeaves/(oobSpines/2||1))>35;
+  const oobSpines=oobEnabled&&oobLeaves>2&&oobFabricMode==='spine100g'?2*Math.ceil(oobLeaves/35):0;
+  const oobSpineCapacityExceeded=oobEnabled&&oobFabricMode==='spine100g'&&Math.ceil(oobLeaves/(oobSpines/2||1))>35;
   const oobLeafSpineLinks=oobSpines?oobLeaves*2:0;
   const oobLeafSpineOptics=oobLeafSpineLinks*2;
   const oobStpLeafLinks=oobAggregators?oobLeaves*2:0;
@@ -2314,7 +2315,7 @@ function calc(){
     : `Compute ${nodes} · Mgmt/Control ${mgmt} · Backend Leafs ${backendLeafOob} · Backend Spines ${backendSpineOob}${frontendEnabled?` · Frontend Leafs ${frontendLeafOob} · Frontend Spines ${frontendSpineOob}`:''}${vastEnabled?` · Storage Leafs ${storageLeafOob}${storageSpineOob?` · Storage Spines ${storageSpineOob}`:''} · VAST ${eq*2}`:''}${ndNodeCount?` · Nexus Dashboard ${ndNodeCount}`:''}`;
   const oobModeSummary=oobFabricMode==='stp1g'
     ? (oobAggregators?`${oobAggregators} × N93108TC-FX3 aggregators · ${oobStpLeafLinks} leaf uplinks + ${oobStpPeerLinks} inter-aggregator STP link${oobStpPeerLinks===1?'':'s'} · 1GBASE-T copper · no optics`:'flat redundant pair')
-    : (oobSpines?`${oobSpines} × N9336C-SE1 spines · ${oobLeafSpineLinks} × 40G links · ${oobLeafSpineOptics} × QSFP-40G-SR4-S=`:'flat redundant pair');
+    : (oobSpines?`${oobSpines} × N9336C-SE1 spines · ${oobLeafSpineLinks} × 100G links · ${oobLeafSpineOptics} × QSFP-100G-DR-S=`:'flat redundant pair');
   if($('oobPolicyNote')){
     if(platform==='gb300-nvl72'){
       const forced=gb300Oob.guardrailForced
@@ -2329,7 +2330,7 @@ function calc(){
     }else{
       $('oobPolicyNote').innerHTML=oobFabricMode==='stp1g'
         ? `Simple Layer-2 OOB selected: native <b>1GBASE-T copper</b> from N93108TC-FX3 leaves to redundant N93108TC-FX3 aggregators. STP controls the redundant path. No uplink transceivers are required; use appropriate copper patch cabling.`
-        : `High-speed OOB selected: N93108TC-FX3 leaves are dual-homed to redundant <b>N9336C-SE1 40G routed spine blocks</b> using QSFP-40G-SR4-S= optics.`;
+        : `High-speed OOB selected: N93108TC-FX3 leaves are dual-homed to redundant <b>N9336C-SE1 100G routed spine blocks</b> using QSFP-100G-DR-S= optics.`;
     }
   }
   const theoreticalTwoTierGpuBoundary=be.gb300Nvl72Ra?8192:Math.floor((51200/be.speed)*(25600/be.speed)/(be.logicalPerGpu/be.planes));
@@ -2771,8 +2772,8 @@ function calc(){
         'Secure AI Factory OOB management');
 
       if(gb300Oob.selectedMode==='spine'){
-        add('GB300 Low-Speed OOB Optics','QSFP-40G-SR4-S=','40G OOB leaf/spine optical endpoint',gb300Oob.lowSpeedUplinkLinks*2,gb300Oob.lowSpeedUplinkLinks+' dual-homed 40G links; both optical ends','TMG-qualified leaf/SE1 family; validate reach');
-        add('GB300 Low-Speed OOB Cabling','CB-M12-M12-MMF','MPO-12 MMF OOB leaf/spine cable',gb300Oob.lowSpeedUplinkLinks,'One cable per 40G link','Validate exact cable assembly and reach');
+        add('GB300 Low-Speed OOB Optics','QSFP-100G-DR-S=','100G OOB leaf/spine optical endpoint',gb300Oob.lowSpeedUplinkLinks*2,gb300Oob.lowSpeedUplinkLinks+' dual-homed 100G links; both optical ends','SE1 TMG-qualified; validate exact FX3 optic/software compatibility and reach');
+        add('GB300 Low-Speed OOB Cabling','CB-LC-LC-SMF','duplex LC SMF OOB leaf/spine cable',gb300Oob.lowSpeedUplinkLinks,'One cable per 100G link','Validate exact cable assembly and reach');
         add('GB300 OOB Core Optics','QSFP-100G-DR-S=','100G OOB upstream optical endpoint',gb300Oob.upstreamLinks*2,gb300Oob.upstreamLinks+' routed upstream links, one per spine, to redundant customer OOB core; both optical ends','SE1 family qualified; customer-core compatibility and routing required');
         add('GB300 OOB Core Cabling','CB-LC-LC-SMF','LC SMF routed OOB core handoff',gb300Oob.upstreamLinks,'One upstream link per spine; customer OOB/core ports required','Customer-core handoff, not an included core switch');
       }
@@ -2798,12 +2799,13 @@ function calc(){
     }
     if(oobSpines){
       add('OOB Management Spine','N9336C-SE1','36-port 40/100G QSFP28 OOB aggregation spine',oobSpines,`${oobLeaves} OOB leaves across ${oobSpines/2} redundant routed blocks; max 35 leaves per pair plus one upstream port/spine`,'Cisco N9336C-SE1 datasheet + scalable OOB planning');
-      add('OOB Management Optics','QSFP-40G-SR4-S=','40GBASE-SR4-S QSFP+ MMF optic',oobLeafSpineOptics,`${oobLeafSpineLinks} physical 40G links × 2 endpoints`,tmgQualified('N9K-C93108TC-FX3','QSFP-40G-SR4-S=')&&tmgQualified('N9336C-SE1','QSFP-40G-SR4-S=')?'TMG qualified on OOB leaf and spine':'TMG validation required');
+      add('OOB Management Cabling','CB-LC-LC-SMF','Duplex LC SMF OOB leaf/spine cable',oobLeafSpineLinks,'One cable per 100G link','Validate exact assembly and reach');
+      add('OOB Management Optics','QSFP-100G-DR-S=','100GBASE-DR QSFP28 SMF optic',oobLeafSpineOptics,`${oobLeafSpineLinks} physical 100G links × 2 endpoints`,tmgQualified('N9K-C93108TC-FX3','QSFP-100G-DR-S=')&&tmgQualified('N9336C-SE1','QSFP-100G-DR-S=')?'TMG qualified on OOB leaf and spine':'TMG validation required');
     }
   }
   if(oobSpines){
-    add('OOB Core Optics','QSFP-40G-SR4-S=','40G OOB routed upstream optical endpoint',oobSpines*2,oobSpines+' upstream links, one per spine, to redundant customer core; both optical ends','SE1 family qualified; validate customer-core compatibility and routing');
-    add('OOB Core Cabling','CB-M12-M12-MMF','MPO-12 MMF OOB core handoff',oobSpines,'One upstream port reserved per spine; customer core ports required','Validate exact cable assembly and reach');
+    add('OOB Core Optics','QSFP-100G-DR-S=','100G OOB routed upstream optical endpoint',oobSpines*2,oobSpines+' upstream links, one per spine, to redundant customer core; both optical ends','SE1 family qualified; validate customer-core compatibility and routing');
+    add('OOB Core Cabling','CB-LC-LC-SMF','duplex LC SMF OOB core handoff',oobSpines,'One upstream port reserved per spine; customer core ports required','Validate exact cable assembly and reach');
   }
   if(ndEnabled){
     add('Nexus Dashboard','ND-CLUSTERG5S','Three-node Nexus Dashboard physical appliance cluster',1,'3 primary ND-NODE-G5S appliances','Cisco Nexus Dashboard 4.1/4.2 deployment guide');
@@ -2895,7 +2897,7 @@ function calc(){
   q.push(`<b class="good">PASS</b> TMG: QDD-400G-DR4-S= is qualified on N9K-C9364D-GX2A and N9K-C9332D-GX2B.`);
   q.push(`<b class="warn">CHECK</b> Fiber/cable assemblies and exact host-side adapters still require configuration-specific TMG/orderability validation.`);
   if(oobEnabled)q.push(`<b class="${oobSpineCapacityExceeded?'bad':'good'}">${oobSpineCapacityExceeded?'REVIEW':'PASS'}</b> OOB fabric sizing: ${oobLeaves} × N93108TC-FX3 leaf switch${oobLeaves===1?'':'es'}${oobSpines?` + ${oobSpines} × N9336C-SE1 spines`:' as a flat redundant pair'} for ${oobEndpoints} management endpoints.`);
-  if(oobEnabled&&oobSpines)q.push(`<b class="good">PASS</b> OOB leaf-spine optics: ${oobLeafSpineOptics} × QSFP-40G-SR4-S= for ${oobLeafSpineLinks} dual-homed 40G links, using MPO-12 UPC MMF. SE1 TMG qualification requires NX-OS 10.6(1) minimum (supplied Cisco TMG screenshots).`);
+  if(oobEnabled&&oobSpines)q.push(`<b class="warn">CHECK</b> OOB leaf-spine optics: ${oobLeafSpineOptics} × QSFP-100G-DR-S= for ${oobLeafSpineLinks} dual-homed 100G links, using duplex LC UPC SMF. SE1 TMG qualification requires NX-OS 10.6(1) minimum; validate exact FX3 optic/software compatibility before ordering.`);
   if(oobEnabled&&oobSpineCapacityExceeded)q.push(`<b class="warn">ARCHITECTURE REVIEW</b> ${oobLeaves} OOB leaves exceeds one N9336C-SE1 spine pair's 36-port leaf-facing capacity. Split the OOB fabric into additional aggregation blocks or select a higher-density spine.`);
   else if(oobEnabled&&oobSpines)q.push(`<b class="warn">CHECK</b> OOB 2-tier topology is a scalable planning model; validate final VLAN/routing/redundancy policy against the customer's management-network standard.`);
 
@@ -3119,6 +3121,7 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
       oobEnabled:oobEnabled,
       oobLeaves:oobEnabled?(platform==='gb300-nvl72'?gb300Oob.inRackMgmtSwitches+gb300Oob.lowSpeedLeaves:oobLeaves):0,
       oobSpines:oobEnabled?(platform==='gb300-nvl72'?gb300Oob.oobSpines:oobSpines):0,
+      uplinkSpeedG:100,
       upstreamLinks:oobEnabled?(platform==='gb300-nvl72'?gb300Oob.upstreamLinks||0:oobSpines):0,
       oobPairBlocks:platform==='gb300-nvl72'?gb300Oob.pairBlocks||[]:[],
       oobAggregators:oobEnabled?oobAggregators:0,
