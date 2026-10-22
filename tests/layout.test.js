@@ -5,7 +5,7 @@ const test = require('node:test');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const api = new Function(html.slice(html.indexOf('function dist'), html.indexOf('function add(cat')) +
-  '; return {backendDesign, frontendDesign, gb300EastWestDesign, gb300ConvergedDesign, gb300StorageNetwork, gb300ManagementFabric, gb300OobDesign, vastNetwork, genericOobPlan, auditFabricLayout};')();
+  '; return {nvl72BackendDesign, backendDesign, frontendDesign, gb300EastWestDesign, gb300ConvergedDesign, gb300StorageNetwork, gb300ManagementFabric, gb300OobDesign, vastNetwork, genericOobPlan, auditFabricLayout};')();
 
 test('backend layout sweep checks bandwidth, cages, whole peer links and optic conservation', () => {
   for (const n of [1,2,4,8,16,31,32,33,63,64,65,80,128,256,512,563,600,630,1024,1025,2048,4096]) {
@@ -209,4 +209,27 @@ test('optical OOB uses 100G DR optics and duplex LC SMF for both leaf and core p
   assert.deepEqual(rows.map(r=>r.qty),[d.lowSpeedUplinkLinks*2,d.lowSpeedUplinkLinks,d.upstreamLinks*2,d.upstreamLinks]);
   const oobRows=html.split('\n').filter(line=>/add\('.*OOB/.test(line));
   assert.ok(oobRows.every(line=>!line.includes('QSFP-40G-SR4-S=')&&!line.includes('CB-M12-M12-MMF')));
+});
+
+
+test('NVL72 preserves four GPU-position rails per plane at rack and scale boundaries',()=>{
+  for(const platform of ['gb300-nvl72','rubin-nvl72']) for(const racks of [1,2,3,4,7,16,31,64,65,70,114,130]){
+    const d=api.nvl72BackendDesign(platform,racks);
+    assert.equal(d.railCount,4);
+    assert.equal(d.gpusPerRailPerRack,18);
+    assert.equal(d.gpus,racks*72);
+    assert.equal(d.railMappingVerified,true,platform+' '+racks);
+    assert.equal(d.leavesPerPlane,d.leavesPerRailPerPlane*4);
+    assert.deepEqual(d.railGpuCounts,Array(4).fill(racks*18));
+    for(let rail=0;rail<4;rail++){
+      const hosts=d.hostLinkDist.slice(rail*d.leavesPerRailPerPlane,(rail+1)*d.leavesPerRailPerPlane);
+      assert.equal(hosts.reduce((a,b)=>a+b,0),racks*18);
+    }
+    assert.equal(d.totalLeaves,d.leavesPerPlane*d.planes);
+    assert.equal(d.leafSpineOptics,d.physicalLeafSpineLinks*2);
+    if(d.portMapVerified)d.hostCageDist.forEach((c,i)=>assert.ok(c+d.uplinkDist[i]<=64));
+    assert.equal(d.planes,platform==='gb300-nvl72'?2:1);
+  }
+  assert.match(html,/NVL72 four rails per plane/);
+  assert.match(html,/railCount:be.railCount/);
 });

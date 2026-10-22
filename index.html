@@ -1035,6 +1035,17 @@ function twoTierPortPlan(linksPerPlane,speed=400,rails=4,switchCapacityGbps=5120
   }
   return null;
 }
+function fourRailDistribution(links,leaves){
+  return Array.from({length:4},()=>dist(links/4,leaves/4)).flat();
+}
+function nvl72BackendDesign(platform,racks){
+  const be=platform==='gb300-nvl72'?gb300EastWestDesign(racks):backendDesign(racks,'single800','rail',72,null,4);
+  const perRail=be.leavesPerPlane/4;
+  return {...be,railCount:4,gpusPerRailPerRack:18,leavesPerRailPerPlane:perRail,
+    railGpuCounts:Array(4).fill(be.gpus/4),
+    railMappingVerified:Number.isInteger(perRail)&&be.hostLinkDist.every((n,i,a)=>n===a[i%perRail]),
+    railBasis:platform==='gb300-nvl72'?'Cisco GB300 reference architecture':'Rubin four-rail planning; NIC speeds and optics remain provisional'};
+}
 function gb300EastWestDesign(activeRacks){
   const active=Math.max(1,Math.ceil(activeRacks));
   const raScaleUnits=Math.ceil(active/2);       // 2 GB300 racks / 144 GPUs per SU
@@ -1070,7 +1081,7 @@ function gb300EastWestDesign(activeRacks){
   const leafSpineCables=physicalLeafSpineLinks*2; // DR8 uses dual MPO-12 per 800G link
   const logicalLeafSpineLinks=physicalLeafSpineLinks*2; // 2x400G carried per 800G link
   const linksPerPlane=gpus;
-  const hl=dist(linksPerPlane,leavesPerPlane);
+  const hl=fourRailDistribution(linksPerPlane,leavesPerPlane);
   const hc=hl.map(x=>Math.ceil(x/2));
   const up=Array(leavesPerPlane).fill(compact?compact.uplinks/2:18);
   return {
@@ -1309,7 +1320,7 @@ function completeMeshPlan(host,speed=400,cages=64,over=1,external=0){
   }
   return null;
 }
-function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
+function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null,railCount=0){
   let speed,logicalPerGpu,planes,isCustom=!!customProfile,aggregatePerGpu,nicProfile=null,hostInterfaceSpeed=null,portMode=null,physicalPortsPerGpu=1;
   let profileBasis='gpu',linksPerServer=null,physicalPortsPerServer=null;
   if(customProfile){
@@ -1413,7 +1424,9 @@ function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
   }else{
     // Generic/custom design path retained for non-Cisco-RA profiles.
     if(topology==='rail'){
-      if(!isCustom && gpusPerNode===8 && speed===800 && logicalPerGpu===1){
+      if(railCount){
+        leaves=railCount*Math.ceil(linksPerPlane/(railCount*Math.floor(25600/speed)));
+      }else if(!isCustom && gpusPerNode===8 && speed===800 && logicalPerGpu===1){
         leaves=Math.max(8,8*Math.ceil(nodes/32));
       }else{
         const logicalLinksPerServer=profileBasis==='server'?linksPerServer:gpusPerNode*logicalPerGpu;
@@ -1425,11 +1438,11 @@ function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
     }
 
     while(true){
-      hl=dist(linksPerPlane,leaves);
+      hl=railCount===4?fourRailDistribution(linksPerPlane,leaves):dist(linksPerPlane,leaves);
       hc=hl.map(x=>Math.ceil(x*speed/800));
       up=hl.map(x=>Math.ceil(x*speed/800));
       if(hc.every((c,i)=>c+up[i]<=64))break;
-      leaves++;
+      leaves+=railCount||1;
     }
 
     const genericLinksPerPlanePhysical=up.reduce((a,b)=>a+b,0);
@@ -1454,7 +1467,7 @@ function backendDesign(nodes,mode,topology,gpusPerNode=8,customProfile=null){
   let mesh=null;
   if(!superspinesPerPlane){
     mesh=completeMeshPlan(hl,speed);
-    if(!mesh && leaves%2 && leaves<128){
+    if(!mesh && !railCount && leaves%2 && leaves<128){
       const candidate=dist(linksPerPlane,leaves+1);
       const next=completeMeshPlan(candidate,speed);
       if(next){leaves++;hl=candidate;hc=hl.map(n=>Math.ceil(n*speed/800));mesh=next;}
@@ -1699,6 +1712,7 @@ function auditFabricLayout({be,fe,vn,gbMgmt,gbOob,isGb=false,frontendOver=2,dedi
   const checks=[];
   const add=(domain,status,message)=>checks.push({domain,status,message});
   if(be)add('Backend',be.portMapVerified?'PASS':'REVIEW',be.portMapVerified?'Modeled whole-link mapping fits.':'No complete port map verified; capacity estimate only.');
+  if(be?.railCount===4)add('Backend rails',be.railMappingVerified?'PASS':'REVIEW','Four GPU-position rails per plane; 18 GPUs per rail per NVL72 rack.');
   if(fe && fe.leaves){
     if(isGb){
       if(fe.portMapVerified===false)add('Frontend','FAIL','No complete converged mapping fits the modeled two-tier limits.');
@@ -1894,15 +1908,15 @@ function topologyVisual(ctx){
     <text x="600" y="48" text-anchor="middle" fill="#64748b" font-size="10">${nodes} deployed nodes / ${be.gpus} GPUs · ${suMode==='off'?'SU off':suPlan.suCount+' × '+suPlan.suNodes+'-node SU'} · ${top==='rail'?'Rail-Optimized':'Classic'} · ${planeLabel}${be.isCustom?` · ${be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':'Custom NIC'} · ${be.portMode==='sp_dp'?'Single Port / Dual Plane':be.portMode==='dp_dp'?'Dual Port / Dual Plane':'Single Port / Single Plane'}`:''}</text>`;
 
   const railLeafStrip=(x,y,w,count,color,fill,planeName)=>{
-    const visible=Math.min(count,8), gap=5, tileW=(w-gap*(visible-1))/visible;
+    const visible=be.railCount||Math.min(count,8), gap=5, tileW=(w-gap*(visible-1))/visible;
     let s='';
     for(let i=0;i<visible;i++){
       const tx=x+i*(tileW+gap);
       s += `<g><rect x="${tx}" y="${y}" width="${tileW}" height="42" rx="6" fill="${fill}" stroke="${color}" stroke-width="1.3"/>
         <text x="${tx+tileW/2}" y="${y+16}" text-anchor="middle" fill="#f8fafc" font-size="8" font-weight="700">Rail ${i+1}</text>
-        <text x="${tx+tileW/2}" y="${y+30}" text-anchor="middle" fill="#94a3b8" font-size="7">${pid}</text></g>`;
+        <text x="${tx+tileW/2}" y="${y+30}" text-anchor="middle" fill="#94a3b8" font-size="7">${be.railCount?`${be.leavesPerRailPerPlane} leaves`:pid}</text></g>`;
     }
-    if(count>visible)s += `<text x="${x+w+8}" y="${y+25}" fill="#94a3b8" font-size="9">+${count-visible}</text>`;
+    if(!be.railCount && count>visible)s += `<text x="${x+w+8}" y="${y+25}" fill="#94a3b8" font-size="9">+${count-visible}</text>`;
     s += `<text x="${x+w/2}" y="${y+55}" text-anchor="middle" fill="${color}" font-size="8">${planeName}: ${be.speed}G host links · GPU-index affinity · ${count} leaf${count===1?'':'s'}</text>`;
     return s;
   };
@@ -2193,6 +2207,7 @@ function calc(){
   }
   const gpuModel=isCustom?($('customGpuModel').value.trim()||'Custom GPU'):
     (isB300?'NVIDIA B300':isAmdMi355x?'AMD Instinct MI355X':platform==='gb300-nvl72'?'NVIDIA GB300':platform==='rubin-nvl72'||platform==='rubin-hgx'?'NVIDIA Vera Rubin':platform==='h200'?'NVIDIA H200':'GPU');
+  if(platform==='gb300-nvl72'||platform==='rubin-nvl72'){ $('backendTopology').value='rail'; $('backendTopology').disabled=true; }
   const mode=isB300?$('b300mode').value:((isCustom||isRubinNvl8||isAmdMi355x)?'custom':'single800'),top=$('backendTopology').value,pid=$('backendSwitch').value;
   if(isAmdMi355x){
     if($('backendSwitch')){
@@ -2266,7 +2281,7 @@ function calc(){
   }
 
   let be;
-  const makeBackend=n=>platform==='gb300-nvl72'?gb300EastWestDesign(n):backendDesign(rubinRackPid?n*9:n,mode,top,rubinRackPid?8:customGpusPerNode,customBackendProfile);
+  const makeBackend=n=>['gb300-nvl72','rubin-nvl72'].includes(platform)?nvl72BackendDesign(platform,n):backendDesign(rubinRackPid?n*9:n,mode,top,rubinRackPid?8:customGpusPerNode,customBackendProfile);
   if(suFabric==='independent' && suMode!=='off'){
     const one=makeBackend(suPlan.suNodes);
     be={...one,gpus:nodes*customGpusPerNode,totalGpus:nodes*customGpusPerNode,
@@ -2815,6 +2830,7 @@ function calc(){
   $('bomBody').innerHTML=BOM.map(x=>`<tr><td>${x.cat}</td><td class="mono">${x.pid}</td><td>${x.desc}</td><td>${x.required??x.qty}</td><td>${x.spare??0}</td><td><b>${x.total??x.qty}</b></td><td>${x.basis}</td><td><span class="tag">${x.status}</span></td></tr>`).join('');
 
   const q=[];
+  if(be.railCount===4)q.push(`<b class="${be.railMappingVerified?'good':'warn'}">${be.railMappingVerified?'PASS':'CHECK'}</b> NVL72 four rails per plane: GPU positions 1-4 across 18 trays = 18 GPUs/rail/rack; ${be.leavesPerRailPerPlane} leaves/rail/plane. ${be.railBasis}.`);
   if(platform==='gb300-nvl72'){
     q.push(`<b class="${nodes<2?'warn':'good'}">${nodes<2?'STARTER / PRE-PROVISIONED':'PASS'}</b> GB300 E-W: ${nodes} active rack${nodes===1?'':'s'} → ${be.raScaleUnits} Cisco 2-rack network SU${be.raScaleUnits===1?'':'s'} → ${be.fabricRacks}-rack fabric capacity; ${be.totalLeaves} leaves + ${be.totalSpines} spines, dual plane.${nodes<2?' Cisco publishes the N9000 Enterprise RA BOM from 2 racks upward; the 1-rack case is pre-provisioned to that minimum network block.':''}`);
     q.push(`<b class="good">PASS</b> GB300 E-W host path: ${be.gpus} active GPUs → ${be.hostOptics} OSFPR-800G-DR8 host optics, ${be.switchHostOptics} switch-side OSFP-800G-DR8 optics, ${be.hostLeafCables} MPO-12 host-leaf cables.`);
@@ -3065,6 +3081,10 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
     },
     backend:{
       topology:top==='rail'?'Rail-optimized':'Classic',
+      railCount:be.railCount||null,
+      gpusPerRailPerRack:be.gpusPerRailPerRack||null,
+      leavesPerRailPerPlane:be.leavesPerRailPerPlane||null,
+      railMappingVerified:be.railMappingVerified===true,
       planes:be.planes,
       speed:be.speed,
       totalLeaves:be.totalLeaves,
@@ -3559,7 +3579,7 @@ async function exportDesignPptx(){
       for(let p=0;p<planes;p++){
         const leavesPerPlane=d.backend.leavesPerPlane||Math.ceil(d.backend.totalLeaves/planes);
         const spinesPerPlane=d.backend.spinesPerPlane||Math.ceil(d.backend.totalSpines/planes);
-        pptPlanePanel(s,.48+p*(panelW+gap),panelY,panelW,panelH,`Plane ${p+1}`,'',p,spinesPerPlane,leavesPerPlane,d.compute.gpusPerUnit||8);
+        pptPlanePanel(s,.48+p*(panelW+gap),panelY,panelW,panelH,`Plane ${p+1}`,'',p,spinesPerPlane,leavesPerPlane,d.backend.railCount||d.compute.gpusPerUnit||8);
       }
       pptAddTechnicalCallout(s,.48,4.55,9.05,`Lane distribution layer — every scale unit fans into all ${planes} backend plane${planes===1?'':'s'}; each panel shows spines → leaves → representative GPU/NIC host ports`);
       const showSu=Math.min(4,suCount||1),suY=5.48,suW=2.12;

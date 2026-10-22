@@ -650,3 +650,14 @@ Assume **zero spares** and no independent-SU replication unless stated.
 **Recreation order:** normalize inputs → compute power-based or node-based units → SU rounding → backend → frontend → storage capacity and network → management/OOB endpoint rollup → OOB topology guardrail → per-fabric host and uplink optics/cables → per-line spare rules → physical IT power/rack/weight → validation flags → CCW export mapping.
 
 **Version discipline:** Review/update this guide alongside any changes to index.html affecting NIC profiles, size tiers, breakout/optic assumptions, OOB, storage factors, or rack figures. Record source blob SHA for defensible audit trails.
+
+
+## NVL72 four-rail enforcement ? 2026-10-20
+
+Both NVL72 profiles require rail-optimized topology with four GPU-position rails per plane. Each rack has 18 four-GPU compute trays, so each rail carries 18 GPUs per rack. Leaves are provisioned in complete groups of four and host-link distributions repeat across the four rail groups. Rail count is independent of plane count: GB300 retains its published two-plane model; Rubin retains provisional single-800G link assumptions pending a validated OEM network profile. Four-rail arithmetic does not certify Rubin NICs, optics or interoperability.
+
+The design state records rail count, GPUs per rail per rack, leaves per rail per plane, and mapping verification. UI checks and topology labels expose these assumptions; the PowerPoint backend panel uses four representative GPU-position groups instead of 72 rack GPUs.
+
+Source: https://www.cisco.com/c/en/us/products/collateral/data-center-networking/n9000-gb300-nvl72-era.html
+
+Validation: 36 Node tests pass, including both profiles at 1?130 rack boundary samples, rail conservation, leaf cage budgets and unchanged GB300 anchors. Rendered browser and PowerPoint visual verification have not been performed.
