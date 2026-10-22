@@ -5,7 +5,7 @@ const test = require('node:test');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const api = new Function(html.slice(html.indexOf('function dist'), html.indexOf('function add(cat')) +
-  '; return {nvl72BackendDesign, backendDesign, frontendDesign, gb300EastWestDesign, gb300ConvergedDesign, gb300StorageNetwork, gb300ManagementFabric, gb300OobDesign, vastNetwork, genericOobPlan, auditFabricLayout};')();
+  '; return {backendPortConsumption, backendPortConsumptionHtml, nvl72BackendDesign, backendDesign, frontendDesign, gb300EastWestDesign, gb300ConvergedDesign, gb300StorageNetwork, gb300ManagementFabric, gb300OobDesign, vastNetwork, genericOobPlan, auditFabricLayout};')();
 
 test('backend layout sweep checks bandwidth, cages, whole peer links and optic conservation', () => {
   for (const n of [1,2,4,8,16,31,32,33,63,64,65,80,128,256,512,563,600,630,1024,1025,2048,4096]) {
@@ -228,8 +228,131 @@ test('NVL72 preserves four GPU-position rails per plane at rack and scale bounda
     assert.equal(d.totalLeaves,d.leavesPerPlane*d.planes);
     assert.equal(d.leafSpineOptics,d.physicalLeafSpineLinks*2);
     if(d.portMapVerified)d.hostCageDist.forEach((c,i)=>assert.ok(c+d.uplinkDist[i]<=64));
-    assert.equal(d.planes,platform==='gb300-nvl72'?2:1);
+    assert.equal(d.planes,2);
   }
   assert.match(html,/NVL72 four rails per plane/);
   assert.match(html,/railCount:be.railCount/);
+});
+
+test('Rubin NVL72 conserves 144 independent 800G ports per rack and flags two-tier overflow',()=>{
+  for(const racks of [1,2,3,4,7,14,16,28,29,64,130]){
+    const d=api.nvl72BackendDesign('rubin-nvl72',racks);
+    assert.equal(d.gpus,racks*72);
+    assert.equal(d.aggregatePerGpu,1600);
+    assert.equal(d.speed,800);
+    assert.equal(d.physicalPortsPerGpu,2);
+    assert.equal(d.hostOptics,racks*144);
+    assert.equal(d.switchHostOptics,racks*144);
+    assert.equal(d.physicalHostLinks,racks*144);
+    assert.equal(d.linksPerPlane,racks*72);
+    assert.equal(d.hostLinkDist.reduce((a,b)=>a+b,0)*d.planes,racks*144);
+    assert.equal(d.leafSpineOptics,d.physicalLeafSpineLinks*2);
+    assert.match(d.backendLabel,/OEM validation required/);
+    if(d.portMapVerified){
+      d.hostCageDist.forEach((c,i)=>assert.ok(c+d.uplinkDist[i]<=64));
+      assert.ok(Number.isInteger(d.meshLinksPerPair)&&d.meshLinksPerPair>0);
+      assert.ok(d.spineCagesUsed<=64);
+      assert.equal(d.physicalLeafSpineLinks,d.totalLeaves*d.spinesPerPlane*d.meshLinksPerPair);
+    }
+  }
+  assert.equal(api.nvl72BackendDesign('rubin-nvl72',28).portMapVerified,true);
+  assert.equal(api.nvl72BackendDesign('rubin-nvl72',29).portMapVerified,false);
+  assert.match(html,/TBD-800G-CX9-NVL72-HOST/);
+});
+
+test('Rubin spine sweep independently reconciles 1:1 bandwidth and whole-link mesh feasibility',t=>{
+  let checked=0,verified=0,review=0;
+  function check(d,label){
+    checked++;
+    const lanes=800/d.speed;
+    assert.equal(d.hostLinkDist.reduce((a,b)=>a+b,0),d.linksPerPlane,label);
+    assert.equal(d.physicalHostLinks,d.linksPerPlane*d.planes,label);
+    // Independent exhaustive feasibility check for this leaf allocation. Enumerate
+    // physical 800G cages per peer, rather than reusing the production planner.
+    const largestHost=Math.max(...d.hostLinkDist);
+    let feasible=false;
+    for(let s=2;s<=64*lanes&&!feasible;s++){
+      for(let k=1;k<=Math.floor(64*lanes/d.leavesPerPlane);k++){
+        if((s*k)%lanes || (d.leavesPerPlane*k)%lanes)continue;
+        if(s*k<largestHost)continue;
+        if(Math.ceil(largestHost/lanes)+s*k/lanes<=64){feasible=true;break;}
+      }
+    }
+    assert.equal(d.portMapVerified,feasible,label+' feasibility');
+    if(!feasible){
+      review++;
+      assert.equal(d.exceedsTwoTier,true,label);
+      assert.equal(d.fabricTier,'3-tier review',label);
+      return;
+    }
+    verified++;
+    const k=d.meshLinksPerPair,s=d.spinesPerPlane,f=d.leavesPerPlane;
+    assert.ok(Number.isInteger(k)&&k>0,label+' whole links');
+    assert.ok(Number.isInteger(s*k/lanes),label+' leaf uplink cages');
+    assert.ok(Number.isInteger(f*k/lanes),label+' spine receiving cages');
+    assert.ok(f*k/lanes<=64,label+' spine port budget');
+    assert.equal(d.spineCagesUsed,f*k/lanes,label);
+    d.hostLinkDist.forEach((hosts,i)=>{
+      const hostGbps=hosts*d.speed,upGbps=s*k*d.speed;
+      assert.ok(upGbps>=hostGbps,label+' leaf '+i+' 1:1 bandwidth');
+      assert.equal(d.uplinkDist[i]*800,upGbps,label+' uplink bandwidth');
+      assert.equal(d.hostCageDist[i],Math.ceil(hosts/lanes),label);
+      assert.ok(d.hostCageDist[i]+d.uplinkDist[i]<=64,label+' leaf port budget');
+    });
+    const physicalLinks=f*s*k/lanes*d.planes;
+    assert.equal(d.physicalLeafSpineLinks,physicalLinks,label+' link conservation');
+    assert.equal(d.leafSpineOptics,physicalLinks*2,label+' optical endpoints');
+    assert.equal(d.logicalLeafSpineLinks*d.speed,physicalLinks*800,label);
+    assert.ok(physicalLinks*800>=d.physicalHostLinks*d.speed,label+' cluster 1:1');
+  }
+  for(let racks=1;racks<=130;racks++)check(api.nvl72BackendDesign('rubin-nvl72',racks),'NVL72 '+racks+' racks');
+  for(const mode of ['sp_sp','sp_dp'])for(const topology of ['rail','classic']){
+    const p={nicProfile:'cx9-rubin',portMode:mode,hostInterfaceSpeed:800,linkSpeed:400,linksPerGpu:mode==='sp_dp'?2:1,physicalPortsPerGpu:1};
+    for(let servers=1;servers<=1152;servers++)check(api.backendDesign(servers,'custom',topology,8,p),'NVL8 '+mode+' '+topology+' '+servers+' servers');
+    for(let racks=1;racks<=130;racks++)check(api.backendDesign(racks*9,'custom',topology,8,p),'NVL8 '+mode+' '+topology+' '+racks+' full racks');
+  }
+  t.diagnostic(`${checked} Rubin configurations: ${verified} verified 1:1 meshes; ${review} correctly require architecture review`);
+});
+
+test('104 GB300 racks expose occupied cages separately from spare breakout branches',()=>{
+  const d=api.nvl72BackendDesign('gb300-nvl72',104),p=api.backendPortConsumption(d);
+  assert.deepEqual(p.leaves.map(r=>[r.switchesPerPlane,r.hostLinks,r.hostCages,r.upCages,r.freeCages]),[
+    [48,63,32,32,0],[72,62,31,32,1]
+  ]);
+  assert.deepEqual([p.spines.switchesPerPlane,p.spines.downCages,p.spines.upCages,p.spines.freeCages],[64,60,0,4]);
+  assert.equal(p.independentFabrics,1);
+  assert.equal(p.leaves.reduce((s,r)=>s+r.switchesPerPlane*r.freeCages,0)*p.planes,144);
+  assert.equal(p.spines.freeCages*p.spines.switchesPerPlane*p.planes,512);
+  const table=api.backendPortConsumptionHtml(d);
+  assert.match(table,/Host physical ports/);
+  assert.match(table,/Free physical ports/);
+  assert.match(table,/unused branches/);
+});
+
+test('backend port consumption reconciles tiers, independent fabrics and unverified spines',()=>{
+  const designs=[];
+  for(const platform of ['gb300-nvl72','rubin-nvl72'])for(let racks=1;racks<=130;racks++)designs.push(api.nvl72BackendDesign(platform,racks));
+  for(const mode of ['sp_sp','sp_dp'])for(const n of [1,9,32,128,630,1152])designs.push(api.backendDesign(n,'custom','rail',8,{nicProfile:'cx9-rubin',portMode:mode,hostInterfaceSpeed:800,linkSpeed:400,linksPerGpu:mode==='sp_dp'?2:1,physicalPortsPerGpu:1}));
+  for(const d of designs){
+    const p=api.backendPortConsumption(d);
+    assert.equal(p.leaves.reduce((s,r)=>s+r.switchesPerPlane,0),d.leavesPerPlane);
+    assert.equal(p.leaves.reduce((s,r)=>s+r.switchesPerPlane*r.hostCages,0),d.hostCageDist.reduce((a,b)=>a+b,0));
+    assert.equal(p.leaves.reduce((s,r)=>s+r.switchesPerPlane*r.upCages,0)*d.planes,d.physicalLeafSpineLinks);
+    for(const r of p.leaves){assert.equal(r.usedCages+r.freeCages,64);assert.ok(r.freeCages>=0);}
+    if(!d.portMapVerified){
+      assert.equal(p.spines.freeCages,null);
+      assert.match(api.backendPortConsumptionHtml(d),/Unverified/);
+    }else{
+      assert.equal(p.spines.downCages*d.totalSpines,d.physicalLeafSpineLinks);
+      assert.equal(p.spines.upCages*d.totalSpines,d.physicalSpineSuperLinks||0);
+      assert.equal(p.spines.usedCages+p.spines.freeCages,64);
+      assert.ok(p.spines.freeCages>=0);
+    }
+  }
+  const one=api.nvl72BackendDesign('rubin-nvl72',2);
+  const multi={...one,totalLeaves:one.totalLeaves*3,totalSpines:one.totalSpines*3,physicalLeafSpineLinks:one.physicalLeafSpineLinks*3};
+  assert.equal(api.backendPortConsumption(multi).independentFabrics,3);
+  assert.equal(api.backendPortConsumption(multi).spines.freeCages,api.backendPortConsumption(one).spines.freeCages);
+  assert.match(html,/setHtml\('ports',backendPortConsumptionHtml\(be\)\)/);
+  assert.match(html,/portConsumption:backendPortConsumption\(be\)/);
 });

@@ -16,6 +16,10 @@ label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}input,se
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}.kpi b{display:block;font-size:18px;margin-top:5px}.kpi span{font-size:10px;color:var(--muted)}
 .tabs{display:flex;gap:6px;margin-bottom:10px}.tab{background:#0b1828;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:7px 11px;cursor:pointer}.tab.active{color:var(--cyan);border-color:#0ea5e9}
 .panel{display:none}.panel.active{display:block}
+#ports{font-size:12px;line-height:1.6}
+#ports h3{font-size:14px;margin:0 0 10px}
+#ports p{margin:10px 0}
+#ports thead th{position:static;top:auto}
 table{width:100%;border-collapse:collapse;font-size:11px}th,td{padding:8px;border-bottom:1px solid #1d2d40;text-align:left;vertical-align:top}th{color:var(--muted);position:sticky;top:62px;background:#0d1a2a}
 .tag{display:inline-block;padding:2px 6px;border:1px solid #35516c;border-radius:999px;color:#cbd5e1;font-size:9px}.warn{color:var(--amber)}.good{color:var(--green)}.bad{color:var(--red)}
 button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600}
@@ -171,7 +175,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
             <option value="800">800G</option>
           </select></div>
         </div>
-        <div class="footer-note">NIC mode separates <b>physical host cages</b> from <b>logical network links</b>. <b>Single Port / Single Plane:</b> one active link on one plane. <b>Single Port / Dual Plane:</b> one physical host cage is split across two planes (CX-7: 2×200G; CX-8 C8180-style: 2×400G). <b>Dual Port / Dual Plane:</b> two physical NIC ports are used, one per plane (CX-7 dual-port profile: 2×200G; CX-8 C8240-style: 2×400G). The dual-plane switch bandwidth is the same for single-cage split and dual-port modes; the host optic/cable count changes.</div>
+        <div class="footer-note">NIC mode separates <b>physical host cages</b> from <b>logical network links</b>. <b>Single Port / Single Plane:</b> one active link on one plane. <b>Single Port / Dual Plane:</b> one physical host cage is split across two planes (CX-7: 2×200G; CX-8 C8180-style: 2×400G). <b>Dual Port / Dual Plane:</b> two physical NIC ports are used, one per plane (CX-7 dual-port profile: 2×200G; CX-8 C8240-style: 2×400G). The dual-plane switch bandwidth is the same for single-port split and dual-port modes; the host optic/cable count changes.</div>
       </div>
       <div id="amdNicFields" class="custom-box" style="display:none">
         <div class="grid2">
@@ -413,12 +417,14 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
     <div class="tabs">
       <button class="tab active" onclick="showTab('summary',this)">Summary</button>
       <button class="tab" onclick="showTab('topology',this)">Visual Topology</button>
+      <button class="tab" onclick="showTab('ports',this)">Backend Ports</button>
       <button class="tab" onclick="showTab('bom',this)">BOM</button>
       <button class="tab" onclick="showTab('qa',this)">Validation</button>
       <button class="tab" onclick="showTab('facilities',this)">Power & Weight</button><button class="tab" onclick="showTab('racks',this)">Rack Layout</button>
     </div>
     <div id="summary" class="panel active summary"></div>
     <div id="topology" class="panel"></div>
+    <div id="ports" class="panel"></div>
     <div id="bom" class="panel"><div style="max-height:610px;overflow:auto"><div class="bom-scroll" style="max-height:620px;overflow:auto;position:relative">
 <table><thead><tr><th>Category</th><th>PID</th><th>Description</th><th>Required</th><th>Spare</th><th>Total w/ Spare</th><th>Basis</th><th>Status</th></tr></thead><tbody id="bomBody"></tbody></table>
 </div></div></div>
@@ -482,7 +488,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
   <b>Power-budget scenario:</b> the sizer can derive compute node/rack-scale-unit count from a user-entered total compute power budget using max or nominal per-unit power and full-SU alignment; network, storage, and management power remain separate facility overhead.<br>
   <b>NVL72 rack planning:</b> GB300 NVL72 is modeled as a fixed 48U rack-scale system at 140 kW nominal / 142 kW max; 1 NVL72 always consumes 1 dedicated physical rack and is never co-packed. Vera Rubin NVL72 also uses the fixed 1-system/1-rack rule, with power/weight still TBD.<br>
   <b>Cisco B300/CX8 scale math:</b> user-selected compute-unit enforcement may still round deployed servers, but the published 512-GPU SU is only a network reference point and does not force shared-fabric switch counts into whole-SU buckets. Leaves scale at 64 GPU links/leaf; two-tier spines scale at one per two leaves. The 576-node / 4,608-GPU off-anchor case therefore uses 72 leaves + 36 spines per plane. Supplied designs keep the dual-plane 400G backend at 1:1 through 8,192 GPUs (128 leaves / 64 spines per plane); above 8,192 GPUs, shared-fabric leaves and spines interpolate between the documented 10K/16K/32K three-tier anchors.<br>
-  Transceiver BOM and CCW PIDs use Cisco spare ordering format with a trailing '=' where applicable, including ConnectX-8 Cisco host-side optics; NVIDIA validation base P/Ns are normalized for validation checks. ConnectX-7: Single Port / Single Plane uses QDD-400G-SR8=; Single Port / Dual Plane uses one QDD-400G-SR8= with 2×200G fanout; Dual Port / Dual Plane models two QSFP-200G-SR4-S= host optics. ConnectX-8: Single Port / Single Plane uses one active 400G link from the 800G-class host interface; Single Port / Dual Plane uses a single 800G OSFP cage configured as 2×400G; Dual Port / Dual Plane models two physical 400G ports and requires validation of the exact qualified host optic PID.
+  Transceiver BOM and CCW PIDs use Cisco spare ordering format with a trailing '=' where applicable, including ConnectX-8 Cisco host-side optics; NVIDIA validation base P/Ns are normalized for validation checks. ConnectX-7: Single Port / Single Plane uses QDD-400G-SR8=; Single Port / Dual Plane uses one QDD-400G-SR8= with 2×200G fanout; Dual Port / Dual Plane models two QSFP-200G-SR4-S= host optics. ConnectX-8: Single Port / Single Plane uses one active 400G link from the 800G-class host interface; Single Port / Dual Plane uses a single 800G OSFP port configured as 2×400G; Dual Port / Dual Plane models two physical 400G ports and requires validation of the exact qualified host optic PID.
 </div>
 
 
@@ -1039,12 +1045,17 @@ function fourRailDistribution(links,leaves){
   return Array.from({length:4},()=>dist(links/4,leaves/4)).flat();
 }
 function nvl72BackendDesign(platform,racks){
-  const be=platform==='gb300-nvl72'?gb300EastWestDesign(racks):backendDesign(racks,'single800','rail',72,null,4);
+  // NVIDIA preliminary DGX VR NVL72: 144 single-port 800G CX9 NICs / 72 GPUs.
+  // Two planes are a planning arrangement, not a published Supermicro/Cisco RA.
+  const be=platform==='gb300-nvl72'?gb300EastWestDesign(racks):backendDesign(racks,'custom','rail',72,{
+    nicProfile:'cx9-rubin-nvl72',portMode:'dp_dp',planes:2,
+    hostInterfaceSpeed:800,linkSpeed:800,linksPerGpu:2,physicalPortsPerGpu:2
+  },4);
   const perRail=be.leavesPerPlane/4;
-  return {...be,railCount:4,gpusPerRailPerRack:18,leavesPerRailPerPlane:perRail,
+  return {...be,backendLabel:platform==='gb300-nvl72'?be.backendLabel:'1600G aggregate / GPU · 2 x 800G CX9 ports · two-plane planning; OEM validation required',railCount:4,gpusPerRailPerRack:18,leavesPerRailPerPlane:perRail,
     railGpuCounts:Array(4).fill(be.gpus/4),
     railMappingVerified:Number.isInteger(perRail)&&be.hostLinkDist.every((n,i,a)=>n===a[i%perRail]),
-    railBasis:platform==='gb300-nvl72'?'Cisco GB300 reference architecture':'Rubin four-rail planning; NIC speeds and optics remain provisional'};
+    railBasis:platform==='gb300-nvl72'?'Cisco GB300 reference architecture':'Rubin 1600G/GPU: 2 x 800G CX9 ports; two-plane, four-rail planning on 51.2T switches; exact OEM topology and optics require validation'};
 }
 function gb300EastWestDesign(activeRacks){
   const active=Math.max(1,Math.ceil(activeRacks));
@@ -1525,13 +1536,13 @@ function runBackendRegressionSuite(){
         `${(hostBwPerPlane/1000).toFixed(1)}T host ≤ ${(leafUpBwPerPlane/1000).toFixed(1)}T leaf uplink / plane`);
 
     const cageFit=b.hostCageDist.every((c,i)=>c+(b.uplinkDist[i]||0)<=64);
-    add(`${name} · leaf cage fit`,cageFit,
-        `max ${(Math.max(...b.hostCageDist.map((c,i)=>c+(b.uplinkDist[i]||0)))).toFixed(0)} / 64 cages`);
+    add(`${name} · leaf physical port fit`,cageFit,
+        `max ${(Math.max(...b.hostCageDist.map((c,i)=>c+(b.uplinkDist[i]||0)))).toFixed(0)} / 64 physical ports`);
 
     const leafPhysicalPerPlane=b.physicalLeafSpineLinks/b.planes;
     const spineCapacityPhysical=b.spinesPerPlane*64;
     add(`${name} · spine radix`,leafPhysicalPerPlane<=spineCapacityPhysical,
-        `${leafPhysicalPerPlane} physical 800G links / plane ≤ ${spineCapacityPhysical} spine cages`);
+        `${leafPhysicalPerPlane} physical 800G links / plane ≤ ${spineCapacityPhysical} spine physical ports`);
 
     const expectedLsOptics=b.physicalLeafSpineLinks*2;
     add(`${name} · leaf-spine transceivers`,b.leafSpineOptics===expectedLsOptics,
@@ -1539,7 +1550,7 @@ function runBackendRegressionSuite(){
 
     const expectedSwitchHost=b.hostCageDist.reduce((s,x)=>s+x,0)*b.planes;
     add(`${name} · switch-host transceivers`,b.switchHostOptics===expectedSwitchHost,
-        `${b.switchHostOptics} optics = host-facing 800G cages across all planes`);
+        `${b.switchHostOptics} optics = host-facing 800G physical ports across all planes`);
 
     const expectedHostOptics=b.isCustom
       ? (b.profileBasis==='server' ? nodes*b.physicalPortsPerServer : b.gpus*b.physicalPortsPerGpu)
@@ -1707,6 +1718,35 @@ function frontendDesign(nodes,mgmt,linksPerNode,over,external400=0){
     leaves++;
   }
 }
+// Physical cage occupancy; unused breakout branches are not free physical cages.
+function backendPortConsumption(be){
+  const capacity=64, groups=new Map();
+  be.hostLinkDist.forEach((hostLinks,i)=>{
+    const host=be.hostCageDist[i],up=be.uplinkDist[i];
+    const key=[hostLinks,host,up].join('/');
+    if(!groups.has(key))groups.set(key,{role:'Leaf',switchesPerPlane:0,hostLinks,hostCages:host,downCages:0,upCages:up,usedCages:host+up,freeCages:capacity-host-up,capacity});
+    groups.get(key).switchesPerPlane++;
+  });
+  let down=null,up=null;
+  if(be.portMapVerified && be.gb300DerivedThreeTier){
+    down=24;up=24; // Four pod leaves x six 800G links; 24 uplinks.
+  }else if(be.portMapVerified && !be.totalSuperspines){
+    const receiving=be.physicalLeafSpineLinks/be.totalSpines;
+    if(Number.isInteger(receiving)){down=receiving;up=0;}
+  }
+  const spines={role:'Spine',switchesPerPlane:be.spinesPerPlane,hostLinks:0,hostCages:0,downCages:down,upCages:up,
+    usedCages:down===null?null:down+up,freeCages:down===null?null:capacity-down-up,capacity};
+  return {capacity,cageSpeedG:800,hostLinkSpeedG:be.speed,planes:be.planes,
+    independentFabrics:be.totalLeaves/(be.leavesPerPlane*be.planes),
+    verified:be.portMapVerified===true,leaves:[...groups.values()],spines};
+}
+function backendPortConsumptionHtml(be){
+  const p=backendPortConsumption(be),v=n=>n===null?'Unverified':n;
+  const rows=[...p.leaves,p.spines].map(r=>`<tr><td>${r.role}</td><td>${r.switchesPerPlane}</td><td>${r.role==='Leaf'?r.hostLinks+' x '+p.hostLinkSpeedG+'G':'—'}</td><td>${r.hostCages}</td><td>${v(r.downCages)}</td><td>${v(r.upCages)}</td><td>${v(r.usedCages)} / ${r.capacity}</td><td>${v(r.freeCages)}</td></tr>`).join('');
+  return `<h3>Backend leaf and spine port consumption</h3><p>Counts are per switch. Each modeled switch has 64 physical 800G ports. Switch quantities are per plane, per independent fabric; ${p.planes} plane(s), ${p.independentFabrics} independent fabric(s). Leaves with identical consumption are grouped.</p>
+    <div style="overflow:auto"><table><thead><tr><th>Role</th><th>Switches / plane / fabric</th><th>Host links / switch</th><th>Host physical ports</th><th>To leaves</th><th>To spines / superspines</th><th>Used physical ports</th><th>Free physical ports</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p>${p.verified?'Modeled port mapping verified.':'REVIEW: leaf allocations are estimates; spine consumption and availability are unverified.'} Free physical ports exclude unused branches of occupied breakout optics. Availability does not guarantee bandwidth, redundancy or supported expansion; rerun sizing after any change. Counts cover the backend fabric only.</p>`;
+}
 // Physical topology audit; PASS means modeled port arithmetic, not vendor certification.
 function auditFabricLayout({be,fe,vn,gbMgmt,gbOob,isGb=false,frontendOver=2,dedicated=false,oob=null}){
   const checks=[];
@@ -1718,7 +1758,7 @@ function auditFabricLayout({be,fe,vn,gbMgmt,gbOob,isGb=false,frontendOver=2,dedi
       if(fe.portMapVerified===false)add('Frontend','FAIL','No complete converged mapping fits the modeled two-tier limits.');
       const host=fe.endpointDist, cages=fe.hostCageDist;
       const worst=fe.collapsed?0:Math.max(...host.map((n,i)=>n*400/(fe.uplinkDist[i]*800)));
-      if(cages.some((n,i)=>n+(fe.uplinkDist[i]||0)>64))add('Frontend','FAIL','Converged leaf exceeds 64 cages.');
+      if(cages.some((n,i)=>n+(fe.uplinkDist[i]||0)>64))add('Frontend','FAIL','Converged leaf exceeds 64 physical ports.');
       if(!fe.collapsed){
         const pair=fe.uplinkDist[0]*2/fe.spines;
         add('Frontend',Number.isInteger(pair)&&pair>0&&fe.leaves*pair<=128?'PASS':'REVIEW','Converged mesh: '+fe.leaves+' leaves, '+fe.spines+' spines, '+pair+' logical 400G links per pair.');
@@ -1730,16 +1770,16 @@ function auditFabricLayout({be,fe,vn,gbMgmt,gbOob,isGb=false,frontendOver=2,dedi
     const groups=vn.dist;
     const uplinks=vn.uplinksPerSwitch.length===vn.switches?vn.uplinksPerSwitch:groups.flatMap((_,i)=>[vn.uplinksPerSwitch[i],vn.uplinksPerSwitch[i]]);
     const leafFits=groups.every((n,i)=>n+uplinks[2*i]<=32 && n+uplinks[2*i+1]<=32);
-    add('Storage',leafFits?'PASS':'FAIL','Per-storage-leaf host plus uplink occupancy checked against 32 x 400G cages.');
+    add('Storage',leafFits?'PASS':'FAIL','Per-storage-leaf host plus uplink occupancy checked against 32 x 400G physical ports.');
     const receivingSpines=dedicated?2:fe?.spines||0;
     const capacity=receivingSpines*(isGb?128:64);
     const occupied=dedicated?0:(fe?.physicalUplinkLinks||0)*(isGb?2:1);
     const extra=vn.totalUplinkLinks+(isGb?(gbMgmt?.uplink400Links||0):0);
     const reserved=fe?.portMapVerified && (fe.external400||0)>=extra;
-    add('Shared spine',receivingSpines && occupied+extra<=capacity?(reserved?'PASS':'REVIEW'):'FAIL','400G port demand '+(occupied+extra)+' / '+capacity+' across receiving spines; '+(reserved?'external capacity reserved in the per-spine cage budget.':'per-peer placement and breakout packing require validation.'));
+    add('Shared spine',receivingSpines && occupied+extra<=capacity?(reserved?'PASS':'REVIEW'):'FAIL','400G port demand '+(occupied+extra)+' / '+capacity+' across receiving spines; '+(reserved?'external capacity reserved in the per-spine physical port budget.':'per-peer placement and breakout packing require validation.'));
   }
   if(gbMgmt?.leaves){
-    add('Management',Math.ceil(gbMgmt.host200Ports/gbMgmt.leaves/2)+gbMgmt.uplink400Links/gbMgmt.leaves<=32?'PASS':'FAIL','Management-leaf host/uplink cages checked against 32 x 400G ports.');
+    add('Management',Math.ceil(gbMgmt.host200Ports/gbMgmt.leaves/2)+gbMgmt.uplink400Links/gbMgmt.leaves<=32?'PASS':'FAIL','Management-leaf host/uplink physical ports checked against 32 x 400G ports.');
     add('Management','REVIEW','Management far-end optics and cables are included; final NIC/optic interoperability and port assignments require qualification.');
   }
   if(gbOob){
@@ -1905,7 +1945,7 @@ function topologyVisual(ctx){
     </defs>
 
     <text x="600" y="28" text-anchor="middle" fill="#e2e8f0" font-size="16" font-weight="800">Cisco Secure AI Factory — Logical Topology</text>
-    <text x="600" y="48" text-anchor="middle" fill="#64748b" font-size="10">${nodes} deployed nodes / ${be.gpus} GPUs · ${suMode==='off'?'SU off':suPlan.suCount+' × '+suPlan.suNodes+'-node SU'} · ${top==='rail'?'Rail-Optimized':'Classic'} · ${planeLabel}${be.isCustom?` · ${be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':'Custom NIC'} · ${be.portMode==='sp_dp'?'Single Port / Dual Plane':be.portMode==='dp_dp'?'Dual Port / Dual Plane':'Single Port / Single Plane'}`:''}</text>`;
+    <text x="600" y="48" text-anchor="middle" fill="#64748b" font-size="10">${nodes} deployed nodes / ${be.gpus} GPUs · ${suMode==='off'?'SU off':suPlan.suCount+' × '+suPlan.suNodes+'-node SU'} · ${top==='rail'?'Rail-Optimized':'Classic'} · ${planeLabel}${be.isCustom?` · ${be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':be.nicProfile==='cx9-rubin-nvl72'?'ConnectX-9 / Rubin NVL72':'Custom NIC'} · ${be.portMode==='sp_dp'?'Single Port / Dual Plane':be.portMode==='dp_dp'?'Dual Port / Dual Plane':'Single Port / Single Plane'}`:''}</text>`;
 
   const railLeafStrip=(x,y,w,count,color,fill,planeName)=>{
     const visible=be.railCount||Math.min(count,8), gap=5, tileW=(w-gap*(visible-1))/visible;
@@ -2558,6 +2598,7 @@ function calc(){
   : (oobEnabled?`${oob} OOB switches`:'OOB disabled.')}<br><b>Management / Controllers:</b> ${mgmtEnabled?`${mgmt} × ${mgmtServerName} · ${mgmtServerRu}U each · ${(mgmtServerPowerW/1000).toFixed(1)} kW/node · ${mgmtServerWeightLb.toFixed(0)} lb/node.${mgmtMlbPid?`<br><b>Management CCW:</b> ${mgmtMlbPid} → ${mgmtServerPid} × ${mgmt}; configure CPU, memory, storage, VIC and PSUs under the MLB.`:''}`:'Disabled.'}<br><b>VAST:</b> ${vastEnabled?`VAST-DATA-MLB · ${eq} EBoxes · ${vastCapacityLicenses} × VAST-SW-1TB · ${vastCoreLicenses} × VAST-SW-1CPU-CORE · ${vn.switches} N9332D-GX2B storage leaves · ${vn.totalUplinkLinks} physical 400G storage uplinks. ${dedicated?'Dedicated storage frontend spines selected.':'Storage leaves use shared frontend spines.'}`:'Disabled.'}<br><b>OOB Fabric:</b> ${oobEnabled?`${oobLeaves} × N93108TC-FX3 leaves for ${oobEndpoints} management endpoints · ${oobModeSummary}.`:'Disabled.'}${ndEnabled?`<br><b>Nexus Dashboard:</b> ${ndNodeCount} × ND-NODE-G5S (${ndNodeCount===3?'3 primary':'3 primary + '+(ndNodeCount-3)+' secondary'}) · ${ndNodeCount}U · ${(ndPowerW/1000).toFixed(1)} kW planning capacity.`:''}`;
 
 
+  setHtml('ports',backendPortConsumptionHtml(be));
   setHtml('topology', topologyVisual({platform,
     nodes,requestedNodes,suPlan,suMode,suFabric,mgmt,mgmtServerName,be,fe,vn,gb300Oob,gb300MgmtFabric,pid,mode,top,eq,dedicated,oob,oobLeaves,oobSpines,oobAggregators,oobFabricMode,oobUplinkLinks,oobEndpoints,oobBreakdown,recommendDedicated,ndEnabled,ndNodeCount,frontendEnabled,vastEnabled,oobEnabled,mgmtEnabled,gpusPerNode:customGpusPerNode,gpuModel,backendOpticPid,backendOpticMedia,backendOpticReach
   }));
@@ -2598,15 +2639,19 @@ function calc(){
       (platform==='supermicro-b300'||isRackScale)?'PID from supplied Cisco/Supermicro offering table':'Planning');
   }
 
-  add('AI Backend Leaf',pid,'AI fabric leaf switch',be.totalLeaves,`${be.leavesPerPlane}/plane × ${be.planes} plane(s)`,'CVD / RA aligned where applicable');
-  add('AI Backend Spine',pid,'AI fabric spine switch',be.totalSpines,`${be.spinesPerPlane}/plane × ${be.planes} plane(s)`,be.gb300CompactTwoTier?'Derived two-tier rail mapping; whole-link port fit and no bandwidth oversubscription; validate cabling':be.gb300DerivedThreeTier?'Derived GB300 1:1 Clos; 24×800G down + 24×800G up per spine; BU validation required':'CVD / RA aligned where applicable');
+  add('AI Backend Leaf',pid,'AI fabric leaf switch',be.totalLeaves,`${be.leavesPerPlane}/plane × ${be.planes} plane(s)`,platform==='rubin-nvl72'?'Derived 51.2T planning; exact Supermicro/Cisco topology requires validation':'CVD / RA aligned where applicable');
+  add('AI Backend Spine',pid,'AI fabric spine switch',be.totalSpines,`${be.spinesPerPlane}/plane × ${be.planes} plane(s)`,platform==='rubin-nvl72'?'Derived 51.2T planning; exact Supermicro/Cisco topology requires validation':be.gb300CompactTwoTier?'Derived two-tier rail mapping; whole-link port fit and no bandwidth oversubscription; validate cabling':be.gb300DerivedThreeTier?'Derived GB300 1:1 Clos; 24×800G down + 24×800G up per spine; BU validation required':'CVD / RA aligned where applicable');
   if(be.totalSuperspines){
     add('AI Backend Superspine',pid,'AI fabric superspine switch',be.totalSuperspines,`${be.superspinesPerPlane}/plane × ${be.planes} plane(s) · ${be.ssCoresPerPlane} cores/plane · ${be.ssPerCore} superspines/core`,be.gb300DerivedThreeTier?'Derived GB300 Clos from reference port geometry; BU validation required':'Cisco B300/CX8 large-scale RA sample');
   }
-  if(isCustom || isRubinNvl8 || isAmdMi355x){
-    const nicLabel=be.nicProfile==='amd-mi355x'?`AMD MI355X ${be.speed}G RoCE`:be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':'Custom NIC';
+  if(isCustom || isRubinNvl8 || isAmdMi355x || platform==='rubin-nvl72'){
+    const nicLabel=be.nicProfile==='amd-mi355x'?`AMD MI355X ${be.speed}G RoCE`:be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':be.nicProfile==='cx9-rubin-nvl72'?'ConnectX-9 / Rubin NVL72':'Custom NIC';
     let customHostPid,customHostDesc,customHostStatus;
-    if(be.nicProfile==='cx9-rubin'){
+    if(be.nicProfile==='cx9-rubin-nvl72'){
+      customHostPid='TBD-800G-CX9-NVL72-HOST';
+      customHostDesc='800G OSFP host optic for Rubin NVL72 ConnectX-9';
+      customHostStatus='144 host ports/rack from preliminary NVIDIA DGX VR specifications; exact Supermicro optic, cable and Cisco interoperability require validation';
+    }else if(be.nicProfile==='cx9-rubin'){
       customHostPid='MMS4X00-NM-HGX';
       customHostDesc='NVIDIA 800G twin-port OSFP host optic · 2×400G · SMF · dual DR4 · 500 m';
       customHostStatus='Published NVIDIA Rubin NVL8 host optic; validate exact Supermicro SYS-222GS implementation and Cisco switch-side interoperability';
@@ -2623,7 +2668,7 @@ function calc(){
         customHostPid='QDD-400G-SR8=';
         customHostDesc='400GBASE-SR8 QSFP-DD host-side optic · MMF · MPO-16';
         customHostStatus=be.portMode==='sp_dp'
-          ? 'Cisco MMF CX-7 single-cage split profile; validate exact 400G→2×200G fanout cable assembly'
+          ? 'Cisco MMF CX-7 single-port split profile; validate exact 400G→2×200G fanout cable assembly'
           : 'Cisco MMF CX-7 single-port profile; validate exact NIC/server qualification';
       }
     }else if(be.nicProfile==='cx8'){
@@ -2635,8 +2680,8 @@ function calc(){
         customHostPid=backendHost800Pid;
         customHostDesc=backendHost800Desc;
         customHostStatus=be.portMode==='sp_dp'
-          ? 'ConnectX-8 C8180-style single-cage 2×400G Ethernet split; confirm exact server qualification'
-          : 'ConnectX-8 single-cage profile with one active 400G Ethernet link; confirm exact server qualification';
+          ? 'ConnectX-8 C8180-style single-port 2×400G Ethernet split; confirm exact server qualification'
+          : 'ConnectX-8 single-port profile with one active 400G Ethernet link; confirm exact server qualification';
       }
     }else{
       customHostPid=`TBD-${be.hostInterfaceSpeed}G-${backendOpticMedia}-HOST`;
@@ -2652,7 +2697,7 @@ function calc(){
   }else add('AI Backend Optics',backendHost800Pid,backendHost800Desc,be.hostOptics,`1 physical 800G optic per GPU · media matched to ${backendOpticPid} (${backendOpticMedia}, ${backendOpticReach})`,backendOpticIsVr8?'Validated ConnectX-8 800GE RHS module family; confirm exact server qualification':'Validated ConnectX-8 800GE RHS module family; confirm exact server qualification');
   const opticFamily=backendOpticIsVr8?'VR8':'DR8';
   const switchBreakoutDesc=be.speed===200?`800G ${opticFamily} switch-side host-facing 4×200G breakout optic`:be.speed===400?`800G ${opticFamily} switch-side host-facing 2×400G breakout optic`:`800G ${opticFamily} switch-side host-facing optic`;
-  add('AI Backend Optics',backendOpticPid,switchBreakoutDesc,be.switchHostOptics,`${backendOpticMedia} · ${backendOpticReach} · 800G-equivalent cages rounded independently on each leaf/plane`,tmgStatus(pid,backendOpticPid));
+  add('AI Backend Optics',backendOpticPid,switchBreakoutDesc,be.switchHostOptics,`${backendOpticMedia} · ${backendOpticReach} · 800G-equivalent physical ports rounded independently on each leaf/plane`,tmgStatus(pid,backendOpticPid));
   add('AI Backend Optics',backendOpticPid,`800G ${opticFamily} leaf-spine optical endpoint (breakout as required)`,be.leafSpineOptics,`${be.physicalLeafSpineLinks} 800G-equivalent links × 2 endpoints · ${be.logicalLeafSpineLinks||0} logical ${be.speed}G links · ${backendOpticMedia} · ${backendOpticReach}`,tmgStatus(pid,backendOpticPid));
   if(be.gb300Nvl72Ra){
     add('AI Backend Cabling','CB-M12-M12-SMF','MPO-12 to MPO-12 SMF cable — CX-8 host to backend leaf',be.hostLeafCables,`${be.gpus} active CX-8 host optics × 2 plane cables`,'Cisco GB300 NVL72 RA cable model');
@@ -2871,7 +2916,7 @@ function calc(){
   }else if(customNicProfile==='cx7'){
     q.push(`<b class="good">PASS</b> ConnectX-7 Cisco preset uses MMF and forces ${backendOpticPid} on the switch side. ${customNicPortMode==='sp_dp'?'Single Port / Dual Plane: QDD-400G-SR8= host optic split to 2×200G, one per plane; validate fanout interoperability.':customNicPortMode==='dp_dp'?'Dual Port / Dual Plane: 2× QSFP-200G-SR4-S= host optics/GPU, one 200G port per plane; validate exact dual-port adapter SKU.':'Single Port / Single Plane: QDD-400G-SR8= host optic, 1×400G on one plane.'}`);
   }else if(customNicProfile==='cx8'){
-    q.push(`<b class="good">PASS</b> ConnectX-8 media: ${backendOpticMedia} selected on the switch side. ${customNicPortMode==='sp_dp'?`${backendHost800Pid} is the single-cage host optic with 2×400G logical Ethernet links.`:customNicPortMode==='dp_dp'?`Dual-port mode requires two qualified 400G ${backendOpticMedia} host optics per GPU; exact PID remains validation-required.`:`${backendHost800Pid} is the single-cage host optic with one active 400G Ethernet link.`}`);
+    q.push(`<b class="good">PASS</b> ConnectX-8 media: ${backendOpticMedia} selected on the switch side. ${customNicPortMode==='sp_dp'?`${backendHost800Pid} is the single-port host optic with 2×400G logical Ethernet links.`:customNicPortMode==='dp_dp'?`Dual-port mode requires two qualified 400G ${backendOpticMedia} host optics per GPU; exact PID remains validation-required.`:`${backendHost800Pid} is the single-port host optic with one active 400G Ethernet link.`}`);
   }else{
     q.push(`<b class="good">PASS</b> Custom host optic family follows the selected backend media (${backendOpticMedia}); exact ${be.aggregatePerGpu}G host PID remains a NIC/server qualification item.`);
   }
@@ -2880,10 +2925,10 @@ function calc(){
     q.push(`${pass?'<b class="good">PASS</b>':'<b class="bad">FAIL</b>'} Custom 480-GPU / ConnectX-7 Single Port / Dual Plane regression: one 400G host optic/GPU → 2×200G plane links, ${be.leavesPerPlane} leaves + ${be.spinesPerPlane} spines per plane (${be.totalLeaves+be.totalSpines} backend switches total).`);
   }
   if(isCustom && customNicProfile==='cx8' && customNicPortMode==='sp_dp'){
-    q.push(`<b class="good">PASS</b> ConnectX-8 Single Port / Dual Plane: one 800G-class OSFP host cage is configured as 2×400G Ethernet, one 400G link per plane.`);
+    q.push(`<b class="good">PASS</b> ConnectX-8 Single Port / Dual Plane: one 800G-class OSFP host port is configured as 2×400G Ethernet, one 400G link per plane.`);
   }
   if(isCustom && customNicProfile==='cx8' && customNicPortMode==='dp_dp'){
-    q.push(`<b class="good">PASS</b> ConnectX-8 Dual Port / Dual Plane: two physical 400G host ports are modeled, one per plane. Fabric bandwidth matches the single-cage 2×400G mode, but host optic count doubles.`);
+    q.push(`<b class="good">PASS</b> ConnectX-8 Dual Port / Dual Plane: two physical 400G host ports are modeled, one per plane. Fabric bandwidth matches the single-port 2×400G mode, but host optic count doubles.`);
   }
   if(isCustom && customNicProfile==='cx8' && customNicPortMode==='sp_sp'){
     q.push(`<b class="good">PASS</b> ConnectX-8 Single Port / Single Plane: one active 400G/GPU link on a single plane.`);
@@ -2927,7 +2972,7 @@ function calc(){
   if(be.portMapVerified===false)q.push('<b class="bad">PORT MAP REVIEW REQUIRED</b> This BOM is a capacity estimate. A complete whole-link mapping has not been verified; do not treat it as a deployable nonblocking fabric.');
   if(be.portMapVerified && be.meshLinksPerPair)q.push('<b class="good">PORT MAP</b> Each leaf connects to every spine with '+be.meshLinksPerPair+' x '+be.meshLinkSpeedG+'G logical links per pair. Breakout branches may terminate on different peers; validate exact cabling and interoperability.');
   if(be.gb300DerivedThreeTier){
-    q.push(`<b class="${be.derivedCapacityExceeded?'bad':'warn'}">${be.derivedCapacityExceeded?'CAPACITY EXCEEDED':'DERIVED THREE-TIER'}</b> GB300 E-W: ${be.spinesPerPlane} spines and ${be.superspinesPerPlane} superspines per plane. Each local spine uses 24×800G down and 24×800G up. ${be.derivedCapacityExceeded?'Deployment exceeds this derived layout\'s 128-rack capacity; do not use this BOM as a complete design.':'Whole-link distribution fits the 64-cage switch budget with 1:1 bandwidth.'} This is an engineering derivation; validate with Cisco BU/OEM.`);
+    q.push(`<b class="${be.derivedCapacityExceeded?'bad':'warn'}">${be.derivedCapacityExceeded?'CAPACITY EXCEEDED':'DERIVED THREE-TIER'}</b> GB300 E-W: ${be.spinesPerPlane} spines and ${be.superspinesPerPlane} superspines per plane. Each local spine uses 24×800G down and 24×800G up. ${be.derivedCapacityExceeded?'Deployment exceeds this derived layout\'s 128-rack capacity; do not use this BOM as a complete design.':'Whole-link distribution fits the 64-port switch budget with 1:1 bandwidth.'} This is an engineering derivation; validate with Cisco BU/OEM.`);
   }else if(be.exceedsTwoTier){
     const scaleReviewLabel=isAmdMi355x?'LARGE-SCALE FABRIC VALIDATION':'ARCHITECTURE REVIEW';
     const scaleReviewAction=isAmdMi355x
@@ -2979,6 +3024,7 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
     q.push(`<b class="good">PASS</b> GB300 NVL72 power model: 140 kW nominal / 142 kW max per rack. Rack constraint checks use 142 kW; installed rack weight remains TBD.`);
   }
   if(platform==='rubin-nvl72'){
+    q.push(`<b class="warn">CHECK</b> Rubin NVL72 backend: 144 x 800G CX9 ports/rack = 1.6 Tbps/GPU; two 800G ports/GPU across two planning planes, four rails/plane. NVIDIA DGX hardware baseline is preliminary; exact Supermicro topology, host optics and Cisco interoperability require validation. Switch sizing uses 51.2T / 64 x 800G, not a 102.4T assumption.`);
     q.push(`<b class="good">PASS</b> Vera Rubin NVL72 fixed-rack rule: 1 NVL72 system = 1 dedicated physical rack. Power and weight remain TBD.`);
   }
   if(isRackScale){
@@ -3085,6 +3131,10 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
       gpusPerRailPerRack:be.gpusPerRailPerRack||null,
       leavesPerRailPerPlane:be.leavesPerRailPerPlane||null,
       railMappingVerified:be.railMappingVerified===true,
+      railBasis:be.railBasis||null,
+      portConsumption:backendPortConsumption(be),
+      aggregatePerGpu:be.aggregatePerGpu,
+      physicalPortsPerGpu:be.physicalPortsPerGpu,
       planes:be.planes,
       speed:be.speed,
       totalLeaves:be.totalLeaves,

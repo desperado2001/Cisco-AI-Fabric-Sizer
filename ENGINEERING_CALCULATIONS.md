@@ -654,10 +654,30 @@ Assume **zero spares** and no independent-SU replication unless stated.
 
 ## NVL72 four-rail enforcement ? 2026-10-20
 
-Both NVL72 profiles require rail-optimized topology with four GPU-position rails per plane. Each rack has 18 four-GPU compute trays, so each rail carries 18 GPUs per rack. Leaves are provisioned in complete groups of four and host-link distributions repeat across the four rail groups. Rail count is independent of plane count: GB300 retains its published two-plane model; Rubin retains provisional single-800G link assumptions pending a validated OEM network profile. Four-rail arithmetic does not certify Rubin NICs, optics or interoperability.
+Both NVL72 profiles require rail-optimized topology with four GPU-position rails per plane. Each rack has 18 four-GPU compute trays, so each rail carries 18 GPUs per rack. Leaves are provisioned in complete groups of four and host-link distributions repeat across the four rail groups. Rail count is independent of plane count: GB300 retains its published two-plane model; Rubin uses the revised two-800G-port planning profile below. Four-rail arithmetic does not certify Rubin NICs, optics or interoperability.
 
 The design state records rail count, GPUs per rail per rack, leaves per rail per plane, and mapping verification. UI checks and topology labels expose these assumptions; the PowerPoint backend panel uses four representative GPU-position groups instead of 72 rack GPUs.
 
 Source: https://www.cisco.com/c/en/us/products/collateral/data-center-networking/n9000-gb300-nvl72-era.html
 
 Validation: 36 Node tests pass, including both profiles at 1?130 rack boundary samples, rail conservation, leaf cage budgets and unchanged GB300 anchors. Rendered browser and PowerPoint visual verification have not been performed.
+
+## Rubin NVL72 backend revision - 2026-10-22
+
+NVIDIA's preliminary DGX Vera Rubin NVL72 specifications list 144 single-port 800G ConnectX-9 interfaces for 72 GPUs. The revised NVL72 baseline therefore uses two physical 800G ports per GPU: 1.6 Tbps/GPU, 144 host interfaces/optics and 115.2 Tbps per rack. This replaces the prior one-port, 800G/GPU estimate. The DGX baseline does not certify the exact Supermicro implementation.
+
+Source: https://www.nvidia.com/en-eu/data-center/dgx-vera-rubin-nvl72/ (checked 2026-10-22; preliminary specifications subject to change).
+
+Engineering assumption: distribute the two independent ports across two 800G planning planes, retaining four GPU-position rails per plane. Each rail has 18 host links/rack/plane. This is not a vendor-approved two-plane topology and does not adopt the workbook's eight-plane 200G design. Keep the existing 51.2T switch geometry (64 x 800G cages), not the workbook's 102.4T assumption. Host optic ordering PID remains TBD pending exact OEM qualification; do not reuse a ConnectX-8 validated host optic claim.
+
+For R racks, host links = host optics = switch-host optics = 144R; per-plane host links = 72R. Initial leaves/plane = 4 x CEILING(72R / (4 x 32)), preserving four rails and reserving equal host/uplink bandwidth. Complete whole-link mesh checks determine spines. The current two-tier model fits 28 full racks (2,016 GPUs); 29 racks require architecture review. No deployable Rubin three-tier topology is inferred. Leaf-spine optics count both endpoints. Export state carries bandwidth, physical ports/GPU and the planning basis; UI/BOM labels identify OEM validation requirements. Rubin NVL8 is unchanged.
+
+Regression countercheck: all 38 Node tests pass. An independent enumeration checks 5,258 Rubin configurations: NVL72 at every rack count 1-130; NVL8 single/dual-plane modes with rail/classic topology at every server count 1-1,152 and full-rack count 1-130 (nine servers/rack). Of these, 4,576 have a complete modeled mesh with at least 1:1 leaf uplink bandwidth; 682 correctly require architecture review. Checks reconcile whole peer links, receiving-spine cage limits, host plus uplink leaf cage limits, total fabric bandwidth, links and both optical endpoints. Rejected allocations are independently checked for mesh infeasibility on the modeled 64-cage switches. This is arithmetic validation, not workload, OEM interoperability or rendered UI validation. NVL8 checks cover its existing 400G active-link modes, not an assumed 800G active link per port.
+
+## Backend port consumption - 2026-10-22
+
+The Backend Ports tab reports per-switch physical 800G cage usage against the modeled 64-cage switch. Leaf rows group identical host-link counts, host cages and uplink cages. Free leaf cages = 64 - hostCageDist[i] - uplinkDist[i]. Logical host link speed is displayed separately: an unused 400G branch in an occupied 800G cage does not create a free physical port. Quantities are per plane and per independent fabric; the number of planes and replicated fabrics is shown explicitly.
+
+For verified two-tier meshes, spine downlink cages = physicalLeafSpineLinks / totalSpines; backend uplink cages = 0. Derived verified GB300 three-tier spines use 24 cages toward pod leaves and 24 toward superspines. Unverified layouts expose no claimed spine free capacity. This view covers backend fabric connections only and does not imply sufficient bandwidth, redundancy or qualified breakout paths for expansion. Port consumption is included in backend design state. Superspine port availability is outside this view.
+
+At 104 GB300 racks, each plane has 48 leaves using 32 host + 32 uplink cages (0 free), 72 leaves using 31 host + 32 uplink cages (1 free), and 64 spines using 60 downlink cages (4 free). Across two planes this is 144 free leaf cages and 512 free spine cages; spare breakout branches are excluded. All 40 Node tests pass, including port conservation across GB300 and Rubin scales, three-tier mappings and independent fabrics. Browser visual verification remains outstanding.
