@@ -199,7 +199,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
       <div><label>Server nodes / rack-scale units</label><input id="nodes" type="number" min="1" max="4096" value="20" oninput="calc()"></div>
       <div id="computePowerBudgetWrap"><label>Total compute power budget (kW)</label><input id="computePowerBudgetKw" type="number" min="1" max="100000" step="1" value="1000" oninput="calc()"></div>
       <div id="computePowerBasisWrap"><label>Compute sizing power basis</label><select id="computePowerBasis" onchange="calc()">
-        <option value="max" selected>Maximum / facility provisioning</option>
+        <option value="max" selected>Maximum + 25% server peak headroom</option>
         <option value="typical">Nominal / typical where published</option>
       </select></div>
       <div style="grid-column:1/-1"><div id="powerSizingNote" class="footer-note" style="display:none"></div></div>
@@ -945,6 +945,12 @@ function syncSizingBasis(){
   if(pb)pb.style.opacity=powerMode?'1':'0.45';
   if(note)note.style.display=powerMode?'':'none';
 }
+const SERVER_PEAK_POWER_FACTOR=1.25;
+function serverPeakPowerSpec(spec){
+  const basePowerMaxW=spec.basePowerMaxW??(spec.powerMaxW||0);
+  return {...spec,basePowerMaxW,powerMaxW:basePowerMaxW*SERVER_PEAK_POWER_FACTOR,
+    source:`${spec.source||'User input'}; server peak planning = base maximum x 125% (25% headroom)`};
+}
 function computeUnitPowerForSizing(platform,basis='max'){
   let spec=null;
   if(platform==='supermicro-b300'){
@@ -952,14 +958,16 @@ function computeUnitPowerForSizing(platform,basis='max'){
     spec=PHYSICAL.server[c==='air'?'supermicro-b300-air':c==='liquid-lcc'?'supermicro-b300-lcc':'supermicro-b300-alc'];
   }else if(platform==='rubin-hgx'){
     const kw=Math.max(1,+$('rubinPowerKw')?.value||24);
-    return {powerW:kw*1000,label:`${kw.toFixed(1)} kW/user-entered Rubin NVL8 server`};
+    const fullRack=($('rackScalePid')?.value||'').startsWith('SRS-RUBIN-NVL8-');
+    const powerW=kw*1000*SERVER_PEAK_POWER_FACTOR*(fullRack?9:1);
+    return {powerW,label:`${(powerW/1000).toFixed(2)} kW/Rubin NVL8 ${fullRack?'nine-server rack':'server'} including 25% peak headroom`};
   }else{
     spec=PHYSICAL.server[platform]||PHYSICAL.server.custom;
   }
   if(!spec)return {powerW:0,label:'Power TBD'};
   const useTypical=basis==='typical'&&spec.powerTypicalW>0;
-  const powerW=useTypical?spec.powerTypicalW:(spec.powerMaxW||0);
-  return {powerW,label:powerW>0?`${(powerW/1000).toFixed(1)} kW/${useTypical?'nominal':'max'} per compute unit`:'Power TBD'};
+  const powerW=useTypical?spec.powerTypicalW:(spec.powerMaxW||0)*SERVER_PEAK_POWER_FACTOR;
+  return {powerW,label:powerW>0?`${(powerW/1000).toFixed(2)} kW/${useTypical?'nominal (no peak headroom)':'maximum including 25% peak headroom'} per compute unit`:'Power TBD'};
 }
 function activateCustomSu(){
   if($('suMode'))$('suMode').value='custom';
@@ -2308,7 +2316,7 @@ function calc(){
   const mgmtServerModel=$('mgmtServerModel').value||'c225m8s';
   const mgmtServerPid=mgmtServerModel==='c225m8s'?UCS_MGMT_CCW.c225.pid:mgmtServerModel==='c220m8'?UCS_MGMT_CCW.c220.pid:'CUSTOM-MGMT';
   const mgmtMlbPid=(mgmtServerModel==='c225m8s'||mgmtServerModel==='c220m8')?UCS_MGMT_CCW.mlb:'';
-  const mgmtServerPowerW=Math.max(200,(+$('mgmtServerPowerKw').value||1.2)*1000),mgmtServerWeightLb=Math.max(10,+$('mgmtServerWeightLb').value||40),mgmtServerRu=1;
+  const mgmtServerPowerW=Math.max(200,(+$('mgmtServerPowerKw').value||1.2)*1000)*SERVER_PEAK_POWER_FACTOR,mgmtServerWeightLb=Math.max(10,+$('mgmtServerWeightLb').value||40),mgmtServerRu=1;
   const mgmtServerName=mgmtServerModel==='c225m8s'?'Cisco UCS C225 M8S Management / Controller Server':mgmtServerModel==='c220m8'?'Cisco UCS C220 M8 Management / Controller Server':'Custom Management / Controller Server';
   window.CURRENT_MGMT_CHILD=mgmtMlbPid?mgmtServerPid:'';
   window.CURRENT_MGMT_NODES=mgmtEnabled?mgmt:0;
@@ -2446,6 +2454,7 @@ function calc(){
     if(smPid && !smPid.endsWith('-TBD'))serverSpec={...serverSpec,name:`Supermicro ${smPid} / HGX B300`,pid:smPid};
   }
   if(isCustom)serverSpec={...serverSpec,name:($('customServerName').value.trim()||'Custom GPU Server')};
+  serverSpec=serverPeakPowerSpec(serverSpec);
   const serverPowerW=serverSpec.powerMaxW;
   const serverWeightLb=(weightBasis==='gross'&&serverSpec.weightGrossLb)?serverSpec.weightGrossLb:serverSpec.weightNetLb;
   const rackScalePhysicalUnknown=isRackScale&&(serverPowerW<=0||serverWeightLb<=0);
@@ -2459,7 +2468,7 @@ function calc(){
     if(!powerKnown&&!weightKnown)return;
     physRows.push({name,qty,powerW:pw,totalPowerW:qty*pw,weightLb:wt,totalWeightLb:qty*wt,powerKnown,weightKnown,source:spec.source});
   }
-  pRow(serverSpec.name,nodes,serverSpec);
+  pRow(serverSpec.name,nodes,{...serverSpec,powerTypicalW:null});
   pRow(`${pid} backend leaves`,be.totalLeaves,PHYSICAL.switch[pid]);
   pRow(`${pid} backend spines`,be.totalSpines,PHYSICAL.switch[pid]);
   if(be.totalSuperspines)pRow(`${pid} backend superspines`,be.totalSuperspines,PHYSICAL.switch[pid]);
@@ -2481,9 +2490,9 @@ function calc(){
   pRow(`N9K-C93108TC-FX3 OOB leaves`,oobLeaves,PHYSICAL.switch["N9K-C93108TC-FX3"]);
   if(oobAggregators)pRow(`N9K-C93108TC-FX3 OOB STP aggregators`,oobAggregators,PHYSICAL.switch["N9K-C93108TC-FX3"]);
   if(oobSpines)pRow(`N9336C-SE1 OOB spines`,oobSpines,PHYSICAL.switch["N9336C-SE1"]);
-  pRow(`Cisco UCS C225 M8N VAST EBox`,eq,PHYSICAL.storage["UCSC-C225M8N-EBOX"]);
-  if(mgmtEnabled)physRows.push({name:mgmtServerName,qty:mgmt,powerW:mgmtServerPowerW,totalPowerW:mgmt*mgmtServerPowerW,weightLb:mgmtServerWeightLb,totalWeightLb:mgmt*mgmtServerWeightLb,source:mgmtServerModel==='c225m8s'?'Planning assumption; validate exact C225 M8S configuration':mgmtServerModel==='c220m8'?'Planning assumption; validate exact C220 M8 configuration':'User-entered planning values'});
-  if(ndEnabled)pRow(`Cisco Nexus Dashboard ND-NODE-G5S`,ndNodeCount,PHYSICAL.management["ND-NODE-G5S"]);
+  pRow(`Cisco UCS C225 M8N VAST EBox`,eq,serverPeakPowerSpec(PHYSICAL.storage["UCSC-C225M8N-EBOX"]));
+  if(mgmtEnabled)physRows.push({name:mgmtServerName,qty:mgmt,powerW:mgmtServerPowerW,totalPowerW:mgmt*mgmtServerPowerW,weightLb:mgmtServerWeightLb,totalWeightLb:mgmt*mgmtServerWeightLb,source:'Includes 25% peak power headroom. '+(mgmtServerModel==='c225m8s'?'Planning assumption; validate exact C225 M8S configuration':mgmtServerModel==='c220m8'?'Planning assumption; validate exact C220 M8 configuration':'User-entered planning values')});
+  if(ndEnabled)pRow(`Cisco Nexus Dashboard ND-NODE-G5S`,ndNodeCount,serverPeakPowerSpec(PHYSICAL.management["ND-NODE-G5S"]));
 
   window.LAST_PHYS_ROWS=physRows;
   const rackU=+$('rackU').value||48,rackPowerKw=+$('rackPowerLimit').value||60,rackWeightLb=+$('rackWeightLimit').value||3000,rackStrategy=$('rackStrategy').value||'role';
@@ -2507,10 +2516,10 @@ function calc(){
     {name:'N9K-C93108TC-FX3 OOB leaf',qty:oobLeaves,ru:PHYSICAL.switch["N9K-C93108TC-FX3"].ru,powerW:swPower(PHYSICAL.switch["N9K-C93108TC-FX3"]),weightLb:PHYSICAL.switch["N9K-C93108TC-FX3"].weightNetLb,role:'Storage & Mgmt'},
     {name:'N9K-C93108TC-FX3 OOB STP aggregator',qty:oobAggregators,ru:PHYSICAL.switch["N9K-C93108TC-FX3"].ru,powerW:swPower(PHYSICAL.switch["N9K-C93108TC-FX3"]),weightLb:PHYSICAL.switch["N9K-C93108TC-FX3"].weightNetLb,role:'Storage & Mgmt'},
     {name:'N9336C-SE1 OOB spine',qty:oobSpines,ru:PHYSICAL.switch["N9336C-SE1"].ru,powerW:swPower(PHYSICAL.switch["N9336C-SE1"]),weightLb:PHYSICAL.switch["N9336C-SE1"].weightNetLb,role:'Storage & Mgmt'},
-    {name:'Cisco UCS C225 M8N VAST EBox',qty:eq,ru:PHYSICAL.storage["UCSC-C225M8N-EBOX"].ru,powerW:PHYSICAL.storage["UCSC-C225M8N-EBOX"].powerMaxW,weightLb:PHYSICAL.storage["UCSC-C225M8N-EBOX"].weightNetLb,role:'Storage & Mgmt'},
+    {name:'Cisco UCS C225 M8N VAST EBox',qty:eq,ru:PHYSICAL.storage["UCSC-C225M8N-EBOX"].ru,powerW:serverPeakPowerSpec(PHYSICAL.storage["UCSC-C225M8N-EBOX"]).powerMaxW,weightLb:PHYSICAL.storage["UCSC-C225M8N-EBOX"].weightNetLb,role:'Storage & Mgmt'},
     {name:mgmtServerName,qty:mgmt,ru:mgmtServerRu,powerW:mgmtServerPowerW,weightLb:mgmtServerWeightLb,role:'Management'}
   ].filter(x=>x.qty>0);
-  if(ndEnabled)rackItems.push({name:'Cisco Nexus Dashboard ND-NODE-G5S',qty:ndNodeCount,ru:PHYSICAL.management["ND-NODE-G5S"].ru,powerW:PHYSICAL.management["ND-NODE-G5S"].powerMaxW,weightLb:PHYSICAL.management["ND-NODE-G5S"].weightNetLb,role:'Management'});
+  if(ndEnabled)rackItems.push({name:'Cisco Nexus Dashboard ND-NODE-G5S',qty:ndNodeCount,ru:PHYSICAL.management["ND-NODE-G5S"].ru,powerW:serverPeakPowerSpec(PHYSICAL.management["ND-NODE-G5S"]).powerMaxW,weightLb:PHYSICAL.management["ND-NODE-G5S"].weightNetLb,role:'Management'});
   if(dedicated)rackItems.push({name:'N9K-C9364D-GX2A storage frontend spine',qty:storageSpineCount,ru:PHYSICAL.switch["N9K-C9364D-GX2A"].ru,powerW:swPower(PHYSICAL.switch["N9K-C9364D-GX2A"]),weightLb:PHYSICAL.switch["N9K-C9364D-GX2A"].weightNetLb,role:'Network'});
   let racks=buildRackLayout(rackItems,rackU,usableRackPowerKw,rackWeightLb,rackStrategy);
   if(platform==='gb300-nvl72' || platform==='rubin-nvl72'){
@@ -2564,11 +2573,11 @@ function calc(){
   const totalFacilityWeightLb=physRows.reduce((s,r)=>s+r.totalWeightLb,0);
   const computePowerW=nodes*serverPowerW;
   const switchPowerW=physRows.filter(r=>r.name.includes('N9K')||r.name.includes('N9164')||r.name.includes('N9364')).reduce((s,r)=>s+r.totalPowerW,0);
-  const storageNodePowerW=vastEnabled?eq*PHYSICAL.storage["UCSC-C225M8N-EBOX"].powerMaxW:0;
+  const storageNodePowerW=vastEnabled?eq*serverPeakPowerSpec(PHYSICAL.storage["UCSC-C225M8N-EBOX"]).powerMaxW:0;
   const computeWeightLb=nodes*serverWeightLb;
   const switchWeightLb=physRows.filter(r=>r.name.includes('N9K')||r.name.includes('N9164')||r.name.includes('N9364')).reduce((s,r)=>s+r.totalWeightLb,0);
   const storageNodeWeightLb=vastEnabled?eq*PHYSICAL.storage["UCSC-C225M8N-EBOX"].weightNetLb:0;
-  const ndPowerW=ndNodeCount*PHYSICAL.management["ND-NODE-G5S"].powerMaxW;
+  const ndPowerW=ndNodeCount*serverPeakPowerSpec(PHYSICAL.management["ND-NODE-G5S"]).powerMaxW;
   const ndWeightLb=ndNodeCount*PHYSICAL.management["ND-NODE-G5S"].weightNetLb;
   const mgmtServerTotalPowerW=mgmtEnabled?mgmt*mgmtServerPowerW:0;
   const mgmtServerTotalWeightLb=mgmtEnabled?mgmt*mgmtServerWeightLb:0;
@@ -2616,7 +2625,7 @@ function calc(){
   Switches: ${(switchPowerW/1000).toFixed(1)} kW / ${(switchWeightLb/1000).toFixed(2)} klb ·
   VAST EBoxes: ${vastEnabled?(storageNodePowerW/1000).toFixed(1):'0.0'} kW / ${vastEnabled?(storageNodeWeightLb/1000).toFixed(2):'0.00'} klb · Mgmt/Controllers: ${mgmtEnabled?(mgmtServerTotalPowerW/1000).toFixed(1):'0.0'} kW / ${mgmtEnabled?(mgmtServerTotalWeightLb/1000).toFixed(2):'0.00'} klb${ndEnabled?` · Nexus Dashboard: ${(ndPowerW/1000).toFixed(1)} kW / ${(ndWeightLb/1000).toFixed(2)} klb`:''}`;
 
-  $('facilitySummary').innerHTML=`Power basis: <b>${powerBasis==='typical'?'Typical where published':'Maximum / facility provisioning'}</b> ·
+  $('facilitySummary').innerHTML=`<b>Server peak allowance:</b> 125% of base maximum (25% headroom), applied to compute, management, storage servers and Nexus Dashboard; switches use the selected basis.<br>Power basis: <b>${powerBasis==='typical'?'Typical where published':'Maximum / facility provisioning'}</b> ·
   Weight basis: <b>${weightBasis==='gross'?'Gross where published':'Installed / net'}</b> ·
   Total: <b>${(totalFacilityPowerW/1000).toFixed(1)} kW</b> and <b>${totalFacilityWeightLb.toFixed(0)} lb (${(totalFacilityWeightLb*0.453592).toFixed(0)} kg)</b>.`;
 
@@ -2875,6 +2884,7 @@ function calc(){
   $('bomBody').innerHTML=BOM.map(x=>`<tr><td>${x.cat}</td><td class="mono">${x.pid}</td><td>${x.desc}</td><td>${x.required??x.qty}</td><td>${x.spare??0}</td><td><b>${x.total??x.qty}</b></td><td>${x.basis}</td><td><span class="tag">${x.status}</span></td></tr>`).join('');
 
   const q=[];
+  q.push('<b class="good">PLANNING</b> Server peak power is sized at 125% of base maximum (25% headroom). This allowance is applied once; it is separate from rack utilization and is not a measured transient-spike guarantee. Unknown server power remains TBD.');
   if(be.railCount===4)q.push(`<b class="${be.railMappingVerified?'good':'warn'}">${be.railMappingVerified?'PASS':'CHECK'}</b> NVL72 four rails per plane: GPU positions 1-4 across 18 trays = 18 GPUs/rail/rack; ${be.leavesPerRailPerPlane} leaves/rail/plane. ${be.railBasis}.`);
   if(platform==='gb300-nvl72'){
     q.push(`<b class="${nodes<2?'warn':'good'}">${nodes<2?'STARTER / PRE-PROVISIONED':'PASS'}</b> GB300 E-W: ${nodes} active rack${nodes===1?'':'s'} → ${be.raScaleUnits} Cisco 2-rack network SU${be.raScaleUnits===1?'':'s'} → ${be.fabricRacks}-rack fabric capacity; ${be.totalLeaves} leaves + ${be.totalSpines} spines, dual plane.${nodes<2?' Cisco publishes the N9000 Enterprise RA BOM from 2 racks upward; the 1-rack case is pre-provisioned to that minimum network block.':''}`);
@@ -3122,6 +3132,8 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
       units:nodes,
       serverCount:platform==='gb300-nvl72'?null:computeServerCount,
       computePowerKw:computePowerW/1000,
+      baseMaximumPowerKw:nodes*serverSpec.basePowerMaxW/1000,
+      peakPowerFactor:SERVER_PEAK_POWER_FACTOR,
       computeMlb:computeCcw?computeMlb:'',
       computeAto:computeCcw?computeAto:''
     },
