@@ -71,3 +71,9 @@ See [Layout Verification](docs/LAYOUT_VERIFICATION.md) for domain checks and the
 ## Frontend and OOB sizing correction
 
 GB300 converged frontend now honors the selected oversubscription using a whole-link mesh and reserves storage/management receiving ports. OOB scales in redundant routed aggregation blocks with upstream ports reserved and own-switch management included. At 70 racks, 12 EBoxes and a 2:1 target: 40 frontend leaves + 16 spines, and 10 OOB SE1 spines in five blocks. OOB requires redundant customer-core handoffs. See the latest correction at the top of [Layout Verification](docs/LAYOUT_VERIFICATION.md); it supersedes the earlier audit failures.
+
+## Project phases
+
+Open **Project Phases**, size the first deployment using the normal controls, and choose **Capture current design**. Repeat for subsequent stages. Cumulative mode compares required BOM equipment against previously held quantities; independent mode treats each stage as a separate deployment. Captures include power (with server peak headroom), kg weights, backend port usage and layout status. Use **Replace with current design** to refresh a phase, and export JSON to keep the session's plan. Reuse is a quantity estimate pending architecture/cabling validation; captured phases do not automatically recalculate when inputs change. Existing CSV/XLSX/PPTX exports continue to represent the live design.
+
+Compute platforms are grouped into **Modular servers** and **Full-rack systems**. Rubin NVL8 offers separate single-server (8 GPUs) and nine-server full-rack (72 GPUs) choices, each with its own PID list and quantity units. Project phase cards now offer **Export phase additions to CCW (XLSX)** using captured incremental equipment and configurator child quantities. Check phase software/service lines against existing entitlements before ordering.

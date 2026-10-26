@@ -32,8 +32,8 @@ test('power-budget sizing uses adjusted peak and reconciles Rubin nine-server ra
   assert.equal(a.computeUnitPowerForSizing('gb300-nvl72','typical').powerW,140000);
   assert.equal(a.computeUnitPowerForSizing('rubin-hgx').powerW,30000);
   const rack=api({rubinPowerKw:'24',rackScalePid:'SRS-RUBIN-NVL8-M0'});
-  assert.equal(rack.computeUnitPowerForSizing('rubin-hgx').powerW,270000);
-  assert.equal(Math.floor(1000000/rack.computeUnitPowerForSizing('rubin-hgx').powerW),3);
+  assert.equal(rack.computeUnitPowerForSizing('rubin-nvl8-rack').powerW,270000);
+  assert.equal(Math.floor(1000000/rack.computeUnitPowerForSizing('rubin-nvl8-rack').powerW),3);
   assert.equal(a.computeUnitPowerForSizing('amd-mi355x').label,'Power TBD');
 });
 
@@ -41,7 +41,7 @@ test('peak headroom changes rack packing and facility rows while preserving swit
   const a=api(),spec=a.PHYSICAL.server.b300,p=a.serverPeakPowerSpec(spec);
   const rackSource=html.slice(html.indexOf('function buildRackLayout'),html.indexOf('function rackCardHtml'));
   const pack=new Function(rackSource+';return buildRackLayout;')();
-  const item={name:'B300',qty:4,ru:10,weightLb:330,role:'Compute'};
+  const item={name:'B300',qty:4,ru:10,weightKg:spec.weightNetKg,role:'Compute'};
   assert.equal(pack([{...item,powerW:spec.powerMaxW}],48,60,3000,'role').length,1);
   const racks=pack([{...item,powerW:p.powerMaxW}],48,60,3000,'role');
   assert.equal(racks.length,2);

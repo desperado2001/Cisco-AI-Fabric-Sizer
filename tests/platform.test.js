@@ -1,0 +1,30 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const test=require('node:test');
+const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+test('Rubin rack and modular server selections expose disjoint PIDs and preserve valid overrides',()=>{
+  const select={value:'SYS222GS-R2BTALC2',options:[],set innerHTML(s){this.options=[...s.matchAll(/value="([^"]+)"/g)].map(m=>({value:m[1]}));this.value=this.options[0]?.value||'';}};
+  const controls={rackScalePid:select,rackScalePidWrap:{style:{}},rackScalePidLabel:{}};
+  const sync=new Function('$',html.slice(html.indexOf('function syncRackScalePidOptions'),html.indexOf('function syncRubinProfile'))+';return syncRackScalePidOptions;')(id=>controls[id]);
+  sync('rubin-hgx');
+  assert.equal(select.value,'SYS222GS-R2BTALC2');
+  assert.ok(select.options.every(o=>o.value.startsWith('SYS')));
+  assert.equal(controls.rackScalePidLabel.textContent,'Individual server PID');
+  sync('rubin-nvl8-rack');
+  assert.ok(select.options.every(o=>o.value.startsWith('SRS-RUBIN-NVL8-')));
+  select.value='SRS-RUBIN-NVL8-M1';sync('rubin-nvl8-rack');
+  assert.equal(select.value,'SRS-RUBIN-NVL8-M1');
+  assert.equal(controls.rackScalePidLabel.textContent,'Full-rack system PID');
+});
+test('Rubin deployment mode fixes GPU and server counts independently of stale PID values',()=>{
+  const source=html.slice(html.indexOf("  const isRackScale=['gb300-nvl72'"),html.indexOf('  const customNicProfile=isCustom?'));
+  const get=new Function('platform','isCustom','$',source+';return {isRubinNvl8,rubinRackPid,customGpusPerNode};');
+  const rack=get('rubin-nvl8-rack',false,()=>({value:'SYS222GS-R2BTALC1'}));
+  const server=get('rubin-hgx',false,()=>({value:'SRS-RUBIN-NVL8-M0'}));
+  assert.deepEqual(rack,{isRubinNvl8:true,rubinRackPid:true,customGpusPerNode:72});
+  assert.deepEqual(server,{isRubinNvl8:true,rubinRackPid:false,customGpusPerNode:8});
+  assert.match(html,/Modular servers - quantity is individual servers/);
+  assert.match(html,/Full-rack systems - quantity is complete racks/);
+  assert.match(html,/platform==='rubin-nvl72' \|\| rubinRackPid/);
+});
