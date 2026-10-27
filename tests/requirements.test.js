@@ -22,12 +22,12 @@ function fixture(){
 test('requirements match exact thresholds, with correct PiB conversion and margin signs',()=>{
   const f=fixture(),r=f.api.runComplianceAudit();
   assert.equal(r.breached,0);assert.equal(r.review,0);
-  assert.ok(r.rows.every(r=>r.status==='PASS'));
+  assert.ok(r.rows.filter(r=>r.status!=='NOT REQUESTED').every(r=>r.status==='PASS'));
   assert.equal(f.controls.get('compliance-overall-badge').textContent,'100% COMPLIANT');
   f.setRequirements({'target-nodes':65,'max-rack-kw':44.5,'max-facility-kw':499,'max-weight-kg':1390,'target-storage-pib':5.1,'max-racks':11});
   const failed=f.api.runComplianceAudit();
   assert.equal(failed.breached,6);
-  assert.ok(failed.rows.filter(r=>!r.model).every(r=>r.margin<0&&r.status==='EXCEEDED'));
+  assert.ok(failed.rows.filter(r=>!r.model&&r.status!=='NOT REQUESTED').every(r=>r.margin<0&&r.status==='EXCEEDED'));
   assert.match(f.controls.get('compliance-overall-badge').textContent,/6 CONSTRAINTS BREACHED/);
 });
 
@@ -136,7 +136,7 @@ test('requirements column remains outside result tabs and preserves input event 
   assert.doesNotMatch(html,/showTab\('requirements'/);
   assert.doesNotMatch(html,/id="tab-requirements" class="[^"]*\bpanel\b/);
   const inputs=[...html.matchAll(/<input\b[^>]*id="req-(?!file-input)[^"]+"[^>]*>/g)];
-  assert.equal(inputs.length,8);
+  assert.equal(inputs.length,9);
   assert.ok(inputs.every(m=>m[0].includes('oninput="runComplianceAudit()"')));
   const panels=['summary','topology','ports','phases','bom','qa','facilities','racks'].map(id=>({id,classes:new Set(id==='summary'?['active']:[])}));
   const buttons=panels.map(()=>({classes:new Set()}));
@@ -155,13 +155,13 @@ test('server model mismatch fails independently of sufficient compute node count
   f.setRequirements({'server-model':'h200'});
   let r=f.api.runComplianceAudit();
   assert.equal(r.rows[0].status,'PASS');
-  assert.equal(r.rows[6].status,'EXCEEDED');
+  assert.equal(r.rows.find(r=>r.model).status,'EXCEEDED');
   assert.equal(r.breached,1);
   assert.match(f.controls.get('compliance-matrix-rows').innerHTML,/Model mismatch/);
   f.window.DESIGN_STATE.compute.modelKey='h200';
-  assert.equal(f.api.runComplianceAudit().rows[6].status,'PASS');
+  assert.equal(f.api.runComplianceAudit().rows.find(r=>r.model).status,'PASS');
   f.setRequirements({'server-model':''});
-  assert.equal(f.api.runComplianceAudit().rows[6].status,'NOT REQUESTED');
+  assert.equal(f.api.runComplianceAudit().rows.find(r=>r.model).status,'NOT REQUESTED');
   f.setRequirements({'target-nodes':1.5});
   assert.equal(f.api.runComplianceAudit().rows[0].status,'REVIEW');
 });
@@ -262,4 +262,37 @@ test('invalid snapshots cannot corrupt the database and failed loads restore cur
   assert.match(f.controls.get('req-profile-message').textContent,/Unable to load profile/);
   assert.deepEqual(f.api.captureSizingInputs(),before);
   assert.deepEqual(f.window.DESIGN_STATE.solution,solution);
+});
+
+test('spare audit checks minimum percentage and required BOM coverage',()=>{
+  const f=fixture();f.setRequirements({'min-spare-pct':5,'spare-scope':'all'});
+  const spare=()=>f.api.runComplianceAudit().rows.find(r=>r.key==='min-spare-pct');
+  f.run({platform:'b300',sparePct:4.9,spareScope:'all'});
+  assert.equal(spare().status,'EXCEEDED');assert.ok(spare().margin<0);
+  f.run({sparePct:5});assert.equal(spare().status,'PASS');assert.equal(spare().margin,0);
+  f.run({sparePct:10,spareScope:'optics'});
+  assert.equal(spare().status,'EXCEEDED');assert.equal(spare().scopeMismatch,true);
+  assert.match(f.controls.get('compliance-matrix-rows').innerHTML,/Scope mismatch/);
+  f.setRequirements({'spare-scope':'optics'});assert.equal(spare().status,'PASS');
+  f.run({spareScope:'all'});assert.equal(spare().status,'PASS','all physical coverage satisfies optics subset');
+  f.setRequirements({'min-spare-pct':101});assert.equal(spare().status,'REVIEW');
+  f.setRequirements({'min-spare-pct':''});assert.equal(spare().status,'NOT REQUESTED');
+});
+
+test('spare requirements persist with full inputs and older profiles default to no spare constraint',async()=>{
+  const f=fixture();f.run({platform:'b300',sparePct:7.5,spareScope:'hardware'});
+  f.setRequirements({customer:'Spares Demo','min-spare-pct':5,'spare-scope':'hardware'});
+  const id=f.api.saveCurrentRequirements();
+  f.setRequirements({'min-spare-pct':9,'spare-scope':'all'});f.run({sparePct:0,spareScope:'optics'});
+  f.api.loadRequirementProfile(id);
+  assert.equal(f.controls.get('req-min-spare-pct').value,'5');
+  assert.equal(f.controls.get('req-spare-scope').value,'hardware');
+  assert.equal(f.window.DESIGN_STATE.spares.percent,7.5);
+  assert.equal(f.window.DESIGN_STATE.spares.scope,'hardware');
+  const profile=JSON.parse(f.store.get(key))[id];delete profile['min-spare-pct'];delete profile['spare-scope'];
+  assert.equal(await f.importFile({schemaVersion:3,profiles:{[id]:profile}}),true);
+  f.api.loadRequirementProfile(id);
+  assert.equal(f.controls.get('req-min-spare-pct').value,'');
+  assert.equal(f.api.runComplianceAudit().rows.find(r=>r.key==='min-spare-pct').status,'NOT REQUESTED');
+  f.setRequirements({'min-spare-pct':101});assert.equal(f.api.saveCurrentRequirements(),null);
 });

@@ -525,6 +525,8 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
         <div><label for="req-max-weight-kg">Max Rack Weight (kg)</label><input id="req-max-weight-kg" type="number" min="0" step="10" value="1400" oninput="runComplianceAudit()"></div>
         <div><label for="req-target-storage-pib">Target Usable Storage (PiB)</label><input id="req-target-storage-pib" type="number" min="0" step="0.1" value="5.0" oninput="runComplianceAudit()"></div>
         <div><label for="req-max-racks">Max Total Racks</label><input id="req-max-racks" type="number" min="0" step="1" value="12" oninput="runComplianceAudit()"></div>
+        <div><label for="req-min-spare-pct">Minimum Spares (%)</label><input id="req-min-spare-pct" type="number" min="0" max="100" step="0.1" placeholder="Optional" oninput="runComplianceAudit()"></div>
+        <div><label for="req-spare-scope">Required Spares Coverage</label><select id="req-spare-scope" onchange="runComplianceAudit()"><option value="all">All physical BOM items</option><option value="hardware">Hardware only</option><option value="optics">Optics &amp; cables only</option><option value="">Any selected scope</option></select></div>
       </div>
       <p>Thresholds audit the current design without changing sizing inputs. Node count covers compute servers only: NVL72 counts 18 compute trays per rack; full Rubin NVL8 racks count 9 servers per rack. Model selection checks the platform family; the sized model/PID appears below. A blank threshold is not audited; zero storage means no storage requirement. Deal profiles save requirements and all sizing inputs, including feature toggles. Loading restores the saved configuration and recalculates. Imported matching Customer (DealID) profiles replace saved profiles.</p>
       <span id="compliance-overall-badge" class="tag" role="status" aria-live="polite">Awaiting calculation</span>
@@ -3401,6 +3403,7 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
     layoutAudit,
     customer: String($('customerName')?.value||'').trim() || 'Customer',
     ordering:{vastTerm, suDesc:window.CURRENT_SU_DESC||'',computeAto:window.CURRENT_COMPUTE_ATO||'',mgmtChild:window.CURRENT_MGMT_CHILD||''},
+    spares:{percent:sparePct,scope:spareScope},
     generatedAt: new Date().toLocaleDateString(),
     assumptions:{
       compute:{
@@ -3587,7 +3590,7 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
 
 // SE thresholds are independent of sizing controls and are never fed into calc().
 function requirementFields(){
-  return ['customer','deal-id','target-nodes','server-model','max-rack-kw','max-facility-kw','max-weight-kg','target-storage-pib','max-racks'];
+  return ['customer','deal-id','target-nodes','server-model','max-rack-kw','max-facility-kw','max-weight-kg','target-storage-pib','max-racks','min-spare-pct','spare-scope'];
 }
 function currentRequirements(){
   return Object.fromEntries(requirementFields().map(key=>[key,String($('req-'+key)?.value??'').trim()]));
@@ -3653,6 +3656,7 @@ function validateRequirementProfile(value){
   if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Invalid requirement profile.');
   // GPU-only profiles cannot be converted without a model-specific node density.
   if(!Object.hasOwn(value,'target-nodes')&&Object.hasOwn(value,'target-gpus'))value={...value,'target-nodes':'','server-model':''};
+  value={'min-spare-pct':'','spare-scope':'all',...value};
   const profile={};
   for(const key of requirementFields()){
     const raw=value[key];
@@ -3662,10 +3666,13 @@ function validateRequirementProfile(value){
       if(text.length>160)throw Error('Customer and Deal ID must be 160 characters or fewer.');
     }else if(key==='server-model'){
       if(!['','b300','h200','supermicro-b300','amd-mi355x','rubin-hgx','rubin-nvl8-rack','gb300-nvl72','rubin-nvl72','custom'].includes(text))throw Error('Unknown server model / platform.');
+    }else if(key==='spare-scope'){
+      if(!['','all','hardware','optics'].includes(text))throw Error('Unknown spare coverage scope.');
     }else if(text!==''&&(!/^(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text)||!Number.isFinite(Number(text))||Number(text)<0||(['target-nodes','max-racks'].includes(key)&&!Number.isInteger(Number(text))))){
       throw Error('Invalid nonnegative threshold: '+key);
     }
     profile[key]=text;
+    if(key==='min-spare-pct'&&text!==''&&Number(text)>100)throw Error('Minimum spares must be between 0 and 100%.');
   }
   if(!profile.customer)throw Error('Enter a Customer / Account Name before saving.');
   if(Object.hasOwn(value,'sizing'))profile.sizing=validateSizingInputs(value.sizing);
@@ -3774,10 +3781,11 @@ function runComplianceAudit(){
     ['Total Facility Power','max-facility-kw',f?.totalPowerKw,'kW',false,unknownPower||typical],
     ['Max Rack Weight','max-weight-kg',maxRack('weightKg'),'kg',false,unknownWeight],
     ['VAST Usable Storage','target-storage-pib',d?.storage?.enabled?d.storage.usablePb*1e15/1024**5:0,'PiB',true,false],
-    ['Total Sized Racks','max-racks',f?.rackCount,'racks',false,false]
+    ['Total Sized Racks','max-racks',f?.rackCount,'racks',false,false],
+    ['Spare Allowance','min-spare-pct',d?.spares?.percent,'%',true,false]
   ].map(([label,key,actual,unit,minimum,incomplete])=>{
     const raw=req[key],limit=Number(raw),badInput=$('req-'+key)?.validity?.badInput;
-    const valid=!badInput&&Number.isFinite(limit)&&limit>=0&&(!['target-nodes','max-racks'].includes(key)||Number.isInteger(limit));
+    const valid=!badInput&&Number.isFinite(limit)&&limit>=0&&(key!=='min-spare-pct'||limit<=100)&&(!['target-nodes','max-racks'].includes(key)||Number.isInteger(limit));
     const inactive=(!badInput&&raw==='')||(key==='target-storage-pib'&&limit===0&&valid);
     const known=d&&typeof actual==='number'&&Number.isFinite(actual)&&actual>=0;
     const margin=known&&valid?(minimum?actual-limit:limit-actual):null;
@@ -3785,11 +3793,20 @@ function runComplianceAudit(){
     const status=inactive?'NOT REQUESTED':!valid||!known?'REVIEW':margin < -tolerance?'EXCEEDED':incomplete?'REVIEW':'PASS';
     return {label,key,actual,unit,limit,minimum,margin,status,incomplete};
   });
+  const spareRow=rows.find(r=>r.key==='min-spare-pct');
+  const scopeNames={all:'All physical BOM items',hardware:'Hardware only',optics:'Optics & cables only'};
+  const requiredScope=req['spare-scope'],actualScope=d?.spares?.scope;
+  spareRow.scopeDescription=' · '+(scopeNames[actualScope]||'Coverage TBD');
+  spareRow.requirementScope=' · '+(scopeNames[requiredScope]||'Any selected scope');
+  if(spareRow.status==='PASS'&&spareRow.limit>0&&requiredScope){
+    if(!scopeNames[actualScope])spareRow.status='REVIEW';
+    else if(actualScope!=='all'&&actualScope!==requiredScope){spareRow.status='EXCEEDED';spareRow.scopeMismatch=true;}
+  }
   const modelOptions=$('req-server-model')?.options||[];
   const requiredModel=Array.from(modelOptions).find(o=>o.value===req['server-model'])?.textContent||req['server-model'];
   rows.push({label:'Server Model / Platform',key:'server-model',actual:d?.compute?.platform||'TBD',requirement:requiredModel,status:!req['server-model']?'NOT REQUESTED':!d?.compute?.modelKey?'REVIEW':d.compute.modelKey===req['server-model']?'PASS':'EXCEEDED',model:true});
   const format=(value,unit)=>value.toLocaleString(undefined,{maximumFractionDigits:unit==='PiB'?4:2})+' '+unit;
-  body.innerHTML=rows.map(r=>'<tr><td>'+r.label+'</td><td>'+(r.status==='NOT REQUESTED'?'Not requested':r.model?phaseEscape(r.requirement):phaseEscape(req[r.key])+' '+r.unit+' '+(r.minimum?'minimum':'maximum'))+'</td><td>'+(r.model?phaseEscape(r.actual):typeof r.actual==='number'&&Number.isFinite(r.actual)?format(r.actual,r.unit):'TBD')+(r.incomplete?' (incomplete / review basis)':'')+'</td><td>'+(r.model?(r.status==='PASS'?'Model matches':r.status==='EXCEEDED'?'Model mismatch':'—'):r.status==='NOT REQUESTED'||r.status==='REVIEW'||r.margin===null?'—':(r.margin>=0?'+':'')+format(r.margin,r.unit))+'</td><td class="'+(r.status==='PASS'?'good':r.status==='EXCEEDED'?'bad':'warn')+'">'+r.status+'</td></tr>').join('');
+  body.innerHTML=rows.map(r=>'<tr><td>'+r.label+'</td><td>'+(r.status==='NOT REQUESTED'?'Not requested':r.model?phaseEscape(r.requirement):phaseEscape(req[r.key])+' '+r.unit+' '+(r.minimum?'minimum':'maximum')+phaseEscape(r.requirementScope||''))+'</td><td>'+(r.model?phaseEscape(r.actual):typeof r.actual==='number'&&Number.isFinite(r.actual)?format(r.actual,r.unit):'TBD')+phaseEscape(r.scopeDescription||'')+(r.incomplete?' (incomplete / review basis)':'')+'</td><td>'+(r.scopeMismatch?'Scope mismatch':r.model?(r.status==='PASS'?'Model matches':r.status==='EXCEEDED'?'Model mismatch':'—'):r.status==='NOT REQUESTED'||r.status==='REVIEW'||r.margin===null?'—':(r.margin>=0?'+':'')+format(r.margin,r.unit))+'</td><td class="'+(r.status==='PASS'?'good':r.status==='EXCEEDED'?'bad':'warn')+'">'+r.status+'</td></tr>').join('');
   const breached=rows.filter(r=>r.status==='EXCEEDED').length,review=rows.filter(r=>r.status==='REVIEW').length,active=rows.filter(r=>r.status!=='NOT REQUESTED').length;
   badge.textContent=breached?breached+' CONSTRAINT'+(breached===1?'':'S')+' BREACHED'+(review?' · '+review+' REQUIRE REVIEW':''):review?review+' CONSTRAINT'+(review===1?'':'S')+' REQUIRE REVIEW':active?'100% COMPLIANT':'NO CONSTRAINTS SET';
   badge.className='tag '+(breached?'bad':review||!active?'warn':'good');
