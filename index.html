@@ -9,7 +9,7 @@
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Arial,sans-serif}
 header{position:sticky;top:0;z-index:5;background:rgba(7,17,29,.96);border-bottom:1px solid var(--line);padding:14px 22px;display:flex;justify-content:space-between;align-items:center}
 h1{font-size:18px;margin:0}header small{color:var(--muted)}
-main{max-width:1500px;margin:auto;padding:20px;display:grid;grid-template-columns:420px 1fr;gap:18px}
+main{max-width:2000px;margin:auto;padding:20px;display:grid;grid-template-columns:320px minmax(0,1fr) 430px;gap:18px;align-items:start}main>section,main>aside{min-width:0}
 .card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
 .card h2{font-size:14px;margin:0 0 12px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .unit-input{display:flex;align-items:center;background:#07111d;border:1px solid #33475f;border-radius:8px;min-width:0}.unit-input:focus-within{outline:2px solid var(--cyan);outline-offset:1px}.unit-input input{min-width:0;flex:1;width:0;border:0;background:transparent}.input-unit{flex:none;padding:0 9px 0 3px;color:var(--muted);font-size:11px;white-space:nowrap}.unit-input:has(input:disabled){opacity:.55}
@@ -23,6 +23,13 @@ label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}input,se
 .phase-table{overflow:auto;margin:12px 0}
 #phases h3{font-size:14px}
 .panel{display:none}.panel.active{display:block}
+.requirements-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
+.requirements-header{display:flex;flex-wrap:wrap;gap:12px;align-items:end;justify-content:space-between}
+.requirements-header h3{margin:0;font-size:15px}.requirements-header>div{min-width:180px}
+#tab-requirements th{position:static}#tab-requirements .phase-table{overflow-x:auto}
+#tab-requirements table{min-width:360px;table-layout:fixed}#tab-requirements th,#tab-requirements td{padding:7px 5px;overflow-wrap:anywhere}#requirements-column{position:sticky;top:90px;max-height:calc(100vh - 110px);overflow:auto;scrollbar-gutter:stable}#requirements-column .phase-actions button{font-size:11px}#compliance-overall-badge{font-size:12px;padding:5px 10px}
+@media(min-width:1051px) and (max-width:1399px){.requirements-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:1399px){main{grid-template-columns:360px minmax(0,1fr)}#requirements-column{grid-column:1 / -1;grid-row:1;position:static;max-height:none;overflow:visible}#tab-requirements table{table-layout:auto}}
 #ports{font-size:12px;line-height:1.6}
 #ports h3{font-size:14px;margin:0 0 10px}
 #ports p{margin:10px 0}
@@ -119,7 +126,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
   </div>
 </header>
 <main>
-<section>
+<section id="sizer-inputs">
   <div class="card">
     <h2>1. Compute & GPU Backend</h2>
     <div class="grid2">
@@ -484,6 +491,47 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
     </div>
   </div>
 </section>
+<aside id="requirements-column" aria-label="SE Requirements & Compliance Audit">
+    <div id="tab-requirements" class="card summary">
+      <div class="requirements-header">
+        <h3>Customer Requirements &amp; RFP Thresholds</h3>
+        <div><label for="req-saved-profiles">Saved Deal Profiles</label><select id="req-saved-profiles" onchange="loadRequirementProfile(this.value)"><option value="">Select a saved profile</option></select></div>
+      </div>
+      <div class="phase-actions">
+        <button type="button" onclick="saveCurrentRequirements()">Save Deal Profile</button>
+        <button type="button" onclick="exportRequirementsJSON()">Export JSON</button>
+        <button type="button" onclick="importRequirementsJSON()">Import JSON</button>
+        <input type="file" id="req-file-input" accept=".json,application/json" hidden onchange="handleFileImport(event)">
+      </div>
+      <p id="req-profile-message" role="status" aria-live="polite"></p>
+      <div class="requirements-grid">
+        <div><label for="req-customer">Customer / Account Name</label><input id="req-customer" type="text" maxlength="160" oninput="runComplianceAudit()"></div>
+        <div><label for="req-deal-id">SFDC Deal ID / Oppty #</label><input id="req-deal-id" type="text" maxlength="160" oninput="runComplianceAudit()"></div>
+        <div><label for="req-target-nodes">Target Server Node Count</label><input id="req-target-nodes" type="number" min="0" step="1" value="64" oninput="runComplianceAudit()"></div>
+        <div><label for="req-server-model">Server Model / Platform</label><select id="req-server-model" onchange="runComplianceAudit()">
+          <option value="">Any model</option>
+          <option value="b300">Cisco UCS C880A M8 / B300</option>
+          <option value="h200">Cisco UCS C885A M8 / H200</option>
+          <option value="supermicro-b300">Supermicro HGX B300</option>
+          <option value="amd-mi355x">AMD Instinct MI355X server</option>
+          <option value="rubin-hgx">Rubin NVL8 server</option>
+          <option value="rubin-nvl8-rack">Rubin NVL8 servers in full racks</option>
+          <option value="gb300-nvl72">GB300 NVL72 compute trays</option>
+          <option value="rubin-nvl72">Vera Rubin NVL72 compute trays</option>
+          <option value="custom">Custom modular server</option>
+        </select></div>
+        <div><label for="req-max-rack-kw">Max Rack Power (kW)</label><input id="req-max-rack-kw" type="number" min="0" step="0.5" value="45" oninput="runComplianceAudit()"></div>
+        <div><label for="req-max-facility-kw">Facility Total Power Cap (kW)</label><input id="req-max-facility-kw" type="number" min="0" step="1" value="500" oninput="runComplianceAudit()"></div>
+        <div><label for="req-max-weight-kg">Max Rack Weight (kg)</label><input id="req-max-weight-kg" type="number" min="0" step="10" value="1400" oninput="runComplianceAudit()"></div>
+        <div><label for="req-target-storage-pib">Target Usable Storage (PiB)</label><input id="req-target-storage-pib" type="number" min="0" step="0.1" value="5.0" oninput="runComplianceAudit()"></div>
+        <div><label for="req-max-racks">Max Total Racks</label><input id="req-max-racks" type="number" min="0" step="1" value="12" oninput="runComplianceAudit()"></div>
+      </div>
+      <p>Thresholds audit the current design without changing sizing inputs. Node count covers compute servers only: NVL72 counts 18 compute trays per rack; full Rubin NVL8 racks count 9 servers per rack. Model selection checks the platform family; the sized model/PID appears below. A blank threshold is not audited; zero storage means no storage requirement. Deal profiles save requirements and all sizing inputs, including feature toggles. Loading restores the saved configuration and recalculates. Imported matching Customer (DealID) profiles replace saved profiles.</p>
+      <span id="compliance-overall-badge" class="tag" role="status" aria-live="polite">Awaiting calculation</span>
+      <div class="phase-table"><table><thead><tr><th>Parameter</th><th>Customer Requirement</th><th>Sized Value</th><th>Margin / Delta</th><th>Audit Status</th></tr></thead><tbody id="compliance-matrix-rows"></tbody></table></div>
+      <p id="req-audit-note">Power covers modeled IT and selected CDU electrical loads; facility utility overhead is not modeled. Rack count excludes external CDU floor space. REVIEW indicates incomplete inputs, unknown physical data, or a typical power basis. This scorecard does not replace the Validation tab.</p>
+    </div>
+</aside>
 </main>
 <div class="footer-note" style="max-width:1780px;margin:12px auto 0;padding:0 18px">
   <b>Release status:</b> Internal SE engineering tool. Cisco B300/CX8 reference-scale math is regression-checked against the supplied design samples; final customer BOMs still require human validation in current Cisco/NVIDIA/Supermicro compatibility and ordering tools. Custom GPU/NIC profiles, Rubin server physical data, and any TBD host optics remain explicitly validation-required.
@@ -888,7 +936,7 @@ function toggleFeature(id){const el=$(id);if(!el)return;const on=el.dataset.enab
 function zeroFrontend(){return{endpoints:0,leaves:0,spines:0,endpointDist:[],hostCageDist:[],uplinkDist:[],hostSwitchOptics:0,physicalUplinkLinks:0}}
 function zeroVast(){return{pairs:0,switches:0,dist:[],uplinksPerSwitch:[],totalUplinkLinks:0}}
 
-function showTab(id,btn){document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));$(id).classList.add('active');btn.classList.add('active')}
+function showTab(id,btn){document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));($(id)||$('tab-'+id)).classList.add('active');btn.classList.add('active')}
 function syncCustomNic(){
   const sel=$('customNicProfile'),wrap=$('customNicSpeedWrap'),optic=$('backendOptic');
   if(!sel||!wrap)return;
@@ -3419,6 +3467,8 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
       gpusPerUnit:customGpusPerNode,
       units:nodes,
       serverCount:platform==='gb300-nvl72'||platform==='rubin-nvl72'?null:computeServerCount,
+      serverNodeCount:nodes*((platform==='gb300-nvl72'||platform==='rubin-nvl72')?18:rubinRackPid?9:1),
+      modelKey:['rubin-hgx','rubin-nvl8-rack'].includes(platform)?(rubinRackPid?'rubin-nvl8-rack':'rubin-hgx'):platform,
       deploymentModel:rubinRackPid||platform==='gb300-nvl72'||platform==='rubin-nvl72'?'full-rack':'modular-server',
       computePowerKw:computePowerW/1000,
       baseMaximumPowerKw:nodes*serverSpec.basePowerMaxW/1000,
@@ -3531,8 +3581,220 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
   window.LAST_BACKEND_REGRESSION=regression;
   $('qa').innerHTML=q.join('<br>');
   renderProjectPhases();
+  if(typeof runComplianceAudit === 'function')runComplianceAudit();
 }
 
+
+// SE thresholds are independent of sizing controls and are never fed into calc().
+function requirementFields(){
+  return ['customer','deal-id','target-nodes','server-model','max-rack-kw','max-facility-kw','max-weight-kg','target-storage-pib','max-racks'];
+}
+function currentRequirements(){
+  return Object.fromEntries(requirementFields().map(key=>[key,String($('req-'+key)?.value??'').trim()]));
+}
+function sizingInputElements(){
+  return [...document.querySelectorAll('#sizer-inputs input[id], #sizer-inputs select[id]'),$('customerName')].filter(Boolean);
+}
+function sizingFeatureIds(){return ['frontendToggle','mgmtToggle','vastToggle','oobToggle'];}
+function captureSizingInputs(){
+  return {version:1,
+    inputs:Object.fromEntries(sizingInputElements().map(el=>[el.id,el.type==='checkbox'?el.checked:String(el.value)])),
+    features:Object.fromEntries(sizingFeatureIds().map(id=>[id,featureOn(id)]))};
+}
+function validateSizingInputs(snapshot){
+  if(!snapshot||snapshot.version!==1||!snapshot.inputs||Array.isArray(snapshot.inputs)||typeof snapshot.inputs!=='object'||!snapshot.features||Array.isArray(snapshot.features)||typeof snapshot.features!=='object')throw Error('Invalid sizing input snapshot.');
+  const controls=new Map(sizingInputElements().map(el=>[el.id,el]));
+  const inputs=Object.create(null),features=Object.create(null);
+  for(const [id,value] of Object.entries(snapshot.inputs)){
+    const el=controls.get(id);
+    if(!el)throw Error('Unknown sizing input: '+id);
+    if(el.type==='checkbox'){
+      if(typeof value!=='boolean')throw Error('Invalid checkbox: '+id);
+    }else{
+      if(typeof value!=='string'||value.length>2000)throw Error('Invalid sizing value: '+id);
+      if(el.type==='number'&&value!==''&&(!/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value)||!Number.isFinite(Number(value))))throw Error('Invalid numeric sizing input: '+id);
+    }
+    inputs[id]=value;
+  }
+  for(const id of controls.keys())if(!Object.hasOwn(inputs,id))throw Error('Missing sizing input: '+id);
+  for(const [id,value] of Object.entries(snapshot.features)){
+    if(!sizingFeatureIds().includes(id)||typeof value!=='boolean')throw Error('Invalid sizing feature: '+id);
+    features[id]=value;
+  }
+  for(const id of sizingFeatureIds())if(!Object.hasOwn(features,id))throw Error('Missing sizing feature: '+id);
+  return {version:1,inputs,features};
+}
+function restoreSizingInputs(snapshot){
+  const saved=validateSizingInputs(snapshot),values=saved.inputs;
+  // Build platform-dependent menus first. Replay values afterward so platform
+  // presets cannot overwrite saved NIC, SU, cooling or ordering overrides.
+  for(const id of ['platform','coolingType','customNicProfile','sizingBasis','vastMode'])$(id).value=values[id];
+  syncPlatform();
+  const dormant=id=>id==='supermicroPid'&&values.platform!=='supermicro-b300'||id==='rackScalePid'&&!['gb300-nvl72','rubin-nvl72','rubin-hgx','rubin-nvl8-rack'].includes(values.platform)||id==='ccwComputeAto'&&!['b300','h200'].includes(values.platform);
+  for(const el of sizingInputElements()){
+    const value=values[el.id];
+    if(el.type==='checkbox'){el.checked=value;continue;}
+    if(el.tagName==='SELECT'&&value!==''&&!Array.from(el.options).some(o=>o.value===value)){
+      if(dormant(el.id))continue;
+      throw Error('Unavailable sizing selection: '+el.id+' = '+value);
+    }
+    el.value=value;
+  }
+  for(const id of sizingFeatureIds())if(featureOn(id)!==saved.features[id])toggleFeature(id);
+  syncCustomNic();syncRubinProfile();syncSizingBasis();syncSuUi();toggleVast();syncSupermicroOffering();
+  // An inactive custom-NIC preset must not change another platform's optic.
+  // calc() still applies the active platform's normal optic guardrails.
+  $('backendOptic').value=values.backendOptic;
+}
+function requirementProfileMessage(message,error=false){
+  const el=$('req-profile-message');if(el){el.textContent=message;el.className=error?'bad':'good';}
+}
+function validateRequirementProfile(value){
+  if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Invalid requirement profile.');
+  // GPU-only profiles cannot be converted without a model-specific node density.
+  if(!Object.hasOwn(value,'target-nodes')&&Object.hasOwn(value,'target-gpus'))value={...value,'target-nodes':'','server-model':''};
+  const profile={};
+  for(const key of requirementFields()){
+    const raw=value[key];
+    if(typeof raw!=='string'&&typeof raw!=='number')throw Error('Missing or invalid profile field: '+key);
+    const text=String(raw).trim();
+    if(key==='customer'||key==='deal-id'){
+      if(text.length>160)throw Error('Customer and Deal ID must be 160 characters or fewer.');
+    }else if(key==='server-model'){
+      if(!['','b300','h200','supermicro-b300','amd-mi355x','rubin-hgx','rubin-nvl8-rack','gb300-nvl72','rubin-nvl72','custom'].includes(text))throw Error('Unknown server model / platform.');
+    }else if(text!==''&&(!/^(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text)||!Number.isFinite(Number(text))||Number(text)<0||(['target-nodes','max-racks'].includes(key)&&!Number.isInteger(Number(text))))){
+      throw Error('Invalid nonnegative threshold: '+key);
+    }
+    profile[key]=text;
+  }
+  if(!profile.customer)throw Error('Enter a Customer / Account Name before saving.');
+  if(Object.hasOwn(value,'sizing'))profile.sizing=validateSizingInputs(value.sizing);
+  return profile;
+}
+function requirementProfileKey(profile){return profile.customer+' ('+profile['deal-id']+')';}
+function readRequirementProfiles(){
+  const raw=localStorage.getItem('cisco_sizer_se_requirements_db');
+  const parsed=raw?JSON.parse(raw):{};
+  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw Error('Saved profiles are not a valid profile database.');
+  const profiles=Object.create(null);
+  for(const [key,value] of Object.entries(parsed)){
+    const profile=validateRequirementProfile(value);
+    if(key!==requirementProfileKey(profile))throw Error('Saved profile identity does not match its key.');
+    profiles[key]=profile;
+  }
+  return profiles;
+}
+function refreshSavedProfilesDropdown(selectedKey=''){
+  try{
+    const profiles=readRequirementProfiles(),select=$('req-saved-profiles');
+    if(select){
+      select.innerHTML='<option value="">Select a saved profile</option>'+Object.keys(profiles).sort().map(key=>'<option value="'+phaseEscape(key)+'">'+phaseEscape(key)+'</option>').join('');
+      select.value=Object.hasOwn(profiles,selectedKey)?selectedKey:'';
+    }
+    return profiles;
+  }catch(e){requirementProfileMessage('Unable to read saved profiles: '+e.message,true);return null;}
+}
+function saveCurrentRequirements(){
+  try{
+    const profile=validateRequirementProfile({...currentRequirements(),sizing:captureSizingInputs()}),profiles=readRequirementProfiles(),key=requirementProfileKey(profile);
+    profiles[key]=profile;
+    localStorage.setItem('cisco_sizer_se_requirements_db',JSON.stringify(profiles));
+    refreshSavedProfilesDropdown(key);requirementProfileMessage('Saved '+key+' with all sizing inputs and requirements.');
+    return key;
+  }catch(e){requirementProfileMessage('Unable to save profile: '+e.message,true);return null;}
+}
+function loadRequirementProfile(profileKey){
+  if(!profileKey)return;
+  let previous=null;
+  try{
+    const profiles=readRequirementProfiles();
+    if(!Object.hasOwn(profiles,profileKey))throw Error('Profile was not found.');
+    const profile=profiles[profileKey];
+    if(profile.sizing){
+      previous={requirements:currentRequirements(),sizing:captureSizingInputs()};
+      restoreSizingInputs(profile.sizing);
+    }
+    for(const key of requirementFields())$('req-'+key).value=profile[key];
+    if(profile.sizing){syncCustomerName();calc();}else runComplianceAudit();
+    requirementProfileMessage('Loaded '+profileKey+'. '+(profile.sizing?'Restored sizing inputs and recalculated.':'Legacy requirements-only profile; current sizing inputs retained.')+(profile['target-nodes']===''?' Set a server-node target if required; legacy GPU targets are not converted automatically.':''));
+  }catch(e){
+    if(previous){
+      try{restoreSizingInputs(previous.sizing);for(const key of requirementFields())$('req-'+key).value=previous.requirements[key];syncCustomerName();calc();}
+      catch(rollback){requirementProfileMessage('Unable to load profile: '+e.message+'. Restore failed: '+rollback.message,true);return;}
+    }
+    requirementProfileMessage('Unable to load profile: '+e.message,true);
+  }
+}
+function exportRequirementsJSON(){
+  try{
+    const profiles=readRequirementProfiles();
+    const blob=new Blob([JSON.stringify({schemaVersion:3,profiles},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='Cisco_Sizer_SE_Requirements.json';a.click();URL.revokeObjectURL(url);
+    requirementProfileMessage('Exported '+Object.keys(profiles).length+' saved profile(s).');
+  }catch(e){requirementProfileMessage('Unable to export profiles: '+e.message,true);}
+}
+function importRequirementsJSON(){$('req-file-input').click();}
+async function handleFileImport(event){
+  const input=event.target,file=input.files?.[0];if(!file)return;
+  try{
+    if(file.size>1048576)throw Error('Profile file must be 1 MB or smaller.');
+    const payload=JSON.parse(await file.text());
+    if(!payload||typeof payload!=='object'||Array.isArray(payload))throw Error('Expected a profile database object.');
+    if(Object.hasOwn(payload,'schemaVersion')&&![1,2,3].includes(payload.schemaVersion))throw Error('Unsupported profile schema version.');
+    const imported=Object.hasOwn(payload,'schemaVersion')?payload.profiles:payload;
+    if(!imported||typeof imported!=='object'||Array.isArray(imported))throw Error('Invalid profiles object.');
+    const validated=Object.create(null);
+    for(const [key,value] of Object.entries(imported)){
+      const profile=validateRequirementProfile(value);
+      if(key!==requirementProfileKey(profile))throw Error('Imported profile identity does not match its key.');
+      validated[key]=profile;
+    }
+    const profiles=Object.assign(readRequirementProfiles(),validated);
+    localStorage.setItem('cisco_sizer_se_requirements_db',JSON.stringify(profiles));
+    refreshSavedProfilesDropdown();runComplianceAudit();
+    requirementProfileMessage('Imported '+Object.keys(validated).length+' profile(s). Select a saved profile to restore it.');
+    return true;
+  }catch(e){requirementProfileMessage('Unable to import profiles: '+e.message,true);return false;}
+  finally{input.value='';}
+}
+function runComplianceAudit(){
+  const body=$('compliance-matrix-rows'),badge=$('compliance-overall-badge');
+  if(!body||!badge)return;
+  const req=currentRequirements(),d=window.DESIGN_STATE,f=d?.facility,racks=f?.racks||[];
+  const physical=window.LAST_PHYS_ROWS||[];
+  const items=racks.flatMap(r=>r.items||[]);
+  const unknownPower=!d||!(d.compute?.computePowerKw>0)||physical.some(r=>r.powerKnown===false)||items.some(r=>!(r.powerW>0));
+  const unknownWeight=!d||physical.some(r=>r.weightKnown===false)||items.some(r=>!(r.weightKg>0));
+  const typical=d?.assumptions?.facility?.powerBasis==='typical';
+  const maxRack=(key)=>racks.length?Math.max(...racks.map(r=>r[key])):null;
+  const rows=[
+    ['Server Node Count','target-nodes',d?.compute?.serverNodeCount,'nodes',true,false],
+    ['Max Rack Peak Power','max-rack-kw',maxRack('powerKw'),'kW',false,unknownPower||typical],
+    ['Total Facility Power','max-facility-kw',f?.totalPowerKw,'kW',false,unknownPower||typical],
+    ['Max Rack Weight','max-weight-kg',maxRack('weightKg'),'kg',false,unknownWeight],
+    ['VAST Usable Storage','target-storage-pib',d?.storage?.enabled?d.storage.usablePb*1e15/1024**5:0,'PiB',true,false],
+    ['Total Sized Racks','max-racks',f?.rackCount,'racks',false,false]
+  ].map(([label,key,actual,unit,minimum,incomplete])=>{
+    const raw=req[key],limit=Number(raw),badInput=$('req-'+key)?.validity?.badInput;
+    const valid=!badInput&&Number.isFinite(limit)&&limit>=0&&(!['target-nodes','max-racks'].includes(key)||Number.isInteger(limit));
+    const inactive=(!badInput&&raw==='')||(key==='target-storage-pib'&&limit===0&&valid);
+    const known=d&&typeof actual==='number'&&Number.isFinite(actual)&&actual>=0;
+    const margin=known&&valid?(minimum?actual-limit:limit-actual):null;
+    const tolerance=known?Number.EPSILON*8*Math.max(1,actual,limit):0;
+    const status=inactive?'NOT REQUESTED':!valid||!known?'REVIEW':margin < -tolerance?'EXCEEDED':incomplete?'REVIEW':'PASS';
+    return {label,key,actual,unit,limit,minimum,margin,status,incomplete};
+  });
+  const modelOptions=$('req-server-model')?.options||[];
+  const requiredModel=Array.from(modelOptions).find(o=>o.value===req['server-model'])?.textContent||req['server-model'];
+  rows.push({label:'Server Model / Platform',key:'server-model',actual:d?.compute?.platform||'TBD',requirement:requiredModel,status:!req['server-model']?'NOT REQUESTED':!d?.compute?.modelKey?'REVIEW':d.compute.modelKey===req['server-model']?'PASS':'EXCEEDED',model:true});
+  const format=(value,unit)=>value.toLocaleString(undefined,{maximumFractionDigits:unit==='PiB'?4:2})+' '+unit;
+  body.innerHTML=rows.map(r=>'<tr><td>'+r.label+'</td><td>'+(r.status==='NOT REQUESTED'?'Not requested':r.model?phaseEscape(r.requirement):phaseEscape(req[r.key])+' '+r.unit+' '+(r.minimum?'minimum':'maximum'))+'</td><td>'+(r.model?phaseEscape(r.actual):typeof r.actual==='number'&&Number.isFinite(r.actual)?format(r.actual,r.unit):'TBD')+(r.incomplete?' (incomplete / review basis)':'')+'</td><td>'+(r.model?(r.status==='PASS'?'Model matches':r.status==='EXCEEDED'?'Model mismatch':'—'):r.status==='NOT REQUESTED'||r.status==='REVIEW'||r.margin===null?'—':(r.margin>=0?'+':'')+format(r.margin,r.unit))+'</td><td class="'+(r.status==='PASS'?'good':r.status==='EXCEEDED'?'bad':'warn')+'">'+r.status+'</td></tr>').join('');
+  const breached=rows.filter(r=>r.status==='EXCEEDED').length,review=rows.filter(r=>r.status==='REVIEW').length,active=rows.filter(r=>r.status!=='NOT REQUESTED').length;
+  badge.textContent=breached?breached+' CONSTRAINT'+(breached===1?'':'S')+' BREACHED'+(review?' · '+review+' REQUIRE REVIEW':''):review?review+' CONSTRAINT'+(review===1?'':'S')+' REQUIRE REVIEW':active?'100% COMPLIANT':'NO CONSTRAINTS SET';
+  badge.className='tag '+(breached?'bad':review||!active?'warn':'good');
+  return {rows,breached,review};
+}
 
 const PPT_SLIDES=[
   {id:'title',label:'Title',desc:'Customer, design scale, date and generated design context.',defaultOn:true},
@@ -4361,5 +4623,7 @@ try{
 syncPlatform();toggleVast();syncCustomNic();syncSizingBasis();
 syncPlatform();
 calc();
+refreshSavedProfilesDropdown();
+runComplianceAudit();
 </script>
 </body></html>
