@@ -49,9 +49,9 @@ test('peak headroom changes rack packing and facility rows while preserving swit
   assert.ok(racks.every(r=>r.powerW<=60000));
   const rowSource=html.slice(html.indexOf('  function pRow(name,qty,spec)'),html.indexOf('  pRow(serverSpec.name,nodes,'));
   for(const basis of ['max','typical']){
-    const rows=new Function('powerBasis','weightBasis','spec','sw',
+    const rows=new Function('powerBasis','weightBasis','spec','sw','PHYSICAL',
       'const physRows=[];'+rowSource+';pRow("Compute",4,{...spec,powerTypicalW:null});pRow("Switch",2,sw);return physRows;')(
-      basis,'net',p,a.PHYSICAL.switch['N9164E-NS4-O']);
+      basis,'net',p,a.PHYSICAL.switch['N9164E-NS4-O'],a.PHYSICAL);
     assert.equal(rows[0].totalPowerW,71500);
     assert.equal(rows[1].totalPowerW,2*(basis==='typical'?1455:2209));
   }

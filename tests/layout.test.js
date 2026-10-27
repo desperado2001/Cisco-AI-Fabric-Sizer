@@ -7,6 +7,24 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const api = new Function(html.slice(html.indexOf('function dist'), html.indexOf('function add(cat')) +
   '; return {backendPortConsumption, backendPortConsumptionHtml, nvl72BackendDesign, backendDesign, frontendDesign, gb300EastWestDesign, gb300ConvergedDesign, gb300StorageNetwork, gb300ManagementFabric, gb300OobDesign, vastNetwork, genericOobPlan, auditFabricLayout};')();
 
+test('symmetry audit uses logical breakout links and flags uneven spine paths',()=>{
+  const audit=(spines,uplinks)=>api.auditFabricLayout({be:{portMapVerified:true,spinesPerPlane:spines,speed:400,uplinkDist:[uplinks]}});
+  assert.ok(audit(8,18).checks.some(c=>c.status==='REVIEW'&&/Non-blocking Symmetry Warning/.test(c.message)&&/2, 3, 4, 6/.test(c.message)));
+  assert.ok(!audit(4,18).checks.some(c=>/Symmetry Warning/.test(c.message)));
+  // Three cages = six logical links: symmetry across two spines is valid.
+  assert.ok(!audit(2,3).checks.some(c=>/Symmetry Warning/.test(c.message)));
+});
+
+test('odd GB300 rack inputs reserve complete network blocks without inventing GPUs',()=>{
+  for(const racks of [1,3,5]){
+    const d=api.gb300EastWestDesign(racks);
+    assert.equal(d.fabricRacks,Math.ceil(racks/2)*2);
+    assert.equal(d.gpus,racks*72);
+    assert.equal(d.hostLeafCables,racks*72*2);
+    assert.equal(d.totalLeaves,api.gb300EastWestDesign(racks+1).totalLeaves);
+  }
+});
+
 test('backend layout sweep checks bandwidth, cages, whole peer links and optic conservation', () => {
   for (const n of [1,2,4,8,16,31,32,33,63,64,65,80,128,256,512,563,600,630,1024,1025,2048,4096]) {
     for (const topology of ['rail','classic']) for (const speed of [200,400,800]) for (const planes of [1,2]) {

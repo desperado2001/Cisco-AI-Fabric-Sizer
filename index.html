@@ -415,6 +415,19 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
       </select></div>
     </div>
     <div id="facilityMetrics" class="summary" style="margin-top:10px"></div>
+    <div id="cduOptions" style="margin-top:10px">
+      <label><input id="includeCdu" type="checkbox" onchange="calc()"> Include CDU for liquid cooling</label>
+      <div id="cduFields" class="grid2" style="margin-top:8px">
+        <div><label>Supermicro CDU PID</label><select id="cduPid" onchange="calc()">
+          <option value="LCS-SCDU-1K3LR001">LCS-SCDU-1K3LR001 · 1.8 MW in-row · 20 kW electrical</option>
+          <option value="LCS-SCDU-200AR001">LCS-SCDU-200AR001 · 200 kW sidecar · 19 kW electrical</option>
+          <option value="LCS-SCDU-250L4002">LCS-SCDU-250L4002 · 250 kW EIA in-rack · power TBD</option>
+          <option value="LCS-SCDU-250LP4002">LCS-SCDU-250LP4002 · 250 kW OCP in-rack · 3 kW electrical</option>
+        </select></div>
+        <div><label>Unverified PID electrical draw (kW/unit)</label><input id="cduPowerOverrideKw" type="number" min="0" step="0.1" placeholder="TBD — enter confirmed power" oninput="calc()"></div>
+      </div>
+      <div id="cduSummary" class="footer-note"></div>
+    </div>
     <div class="footer-note">Rack IT load is user-entered in kW and is applied before the usable-rack-power percentage. Power is shown as planning load, not PSU nameplate capacity. Switch optical population can change actual consumption.</div>
   </div>
 </section>
@@ -733,6 +746,73 @@ const PHYSICAL={
   }
 };
 
+const CDU_SPECS={
+  'LCS-SCDU-1K3LR001':{capacityKw:1800,powerW:20000,weightKg:1560,ru:0,placement:'in-row',source:'https://www.supermicro.com/datasheet/datasheet_In_Row_CDU.pdf'},
+  'LCS-SCDU-200AR001':{capacityKw:200,powerW:19000,weightKg:1145,ru:0,placement:'sidecar',source:'https://www.supermicro.com/datasheet/datasheet_Sidecar_CDU.pdf'},
+  'LCS-SCDU-250L4002':{capacityKw:250,powerW:null,weightKg:null,ru:4,placement:'in-rack',source:'Supplied PID list; exact electrical power and weight TBD. Supermicro in-rack datasheet specifies EIA 250L4001, not 250L4002.'},
+  'LCS-SCDU-250LP4002':{capacityKw:250,powerW:3000,weightKg:114,ru:4,placement:'in-rack',source:'https://www.supermicro.com/datasheet/datasheet_In_Rack_CDU.pdf'}
+};
+function cduSelection(platform,coolingType,pid,checked,override=''){
+  const eligible=(platform==='supermicro-b300'&&coolingType!=='air')||['gb300-nvl72','rubin-nvl72','rubin-hgx','rubin-nvl8-rack'].includes(platform);
+  const spec=CDU_SPECS[pid]||CDU_SPECS['LCS-SCDU-1K3LR001'];
+  const userPower=spec.powerW===null&&String(override).trim()!==''&&Number.isFinite(Number(override))&&Number(override)>0;
+  return {...spec,pid:CDU_SPECS[pid]?pid:'LCS-SCDU-1K3LR001',eligible,enabled:eligible&&checked,powerW:userPower?Number(override)*1000:spec.powerW,source:userPower?'User-entered electrical planning value; exact PID validation pending':spec.source};
+}
+function applyCduToRacks(racks,cdu,rackU,usablePowerKw,maxWeightKg,bundled=false){
+  const plan={...cdu,qty:0,totalPowerW:0,totalWeightKg:0,heatKw:0,totalCapacityKw:0,coolingStatus:'NOT_MODELED',bundled:false,warnings:[]};
+  if(!cdu.enabled)return plan;
+  const compute=racks.filter(r=>String(r.role).startsWith('Compute')||r.items.some(x=>x.role==='Compute'));
+  plan.heatKw=compute.reduce((sum,r)=>sum+r.powerW/1000,0);
+  if(!compute.length)return plan;
+  const inRack=cdu.placement==='in-rack';
+  // One local CDU per rack is a hard thermal limit. Do not silently assume
+  // multiple sidecars or in-rack CDUs can be plumbed together to mask overload.
+  const assignments=cdu.placement==='in-row'?[{rack:null,qty:Math.max(1,Math.ceil(plan.heatKw/cdu.capacityKw))}]:compute.map(r=>({rack:r,qty:1}));
+  const sharedCapacityKw=cdu.placement==='in-row'?assignments[0].qty*cdu.capacityKw:null;
+  compute.forEach(r=>{
+    r.coolingLoadKw=r.powerW/1000;
+    r.coolingCapacityKw=sharedCapacityKw||cdu.capacityKw;
+    r.coolingScope=sharedCapacityKw?'Shared CDU group':'Per-rack CDU';
+    r.coolingCheckLoadKw=sharedCapacityKw?plan.heatKw:r.coolingLoadKw;
+    r.coolingStatus=r.coolingLoadKw<=0?'REVIEW':r.coolingCheckLoadKw>r.coolingCapacityKw?'FAIL':'PASS';
+    r.coolingExceeded=r.coolingStatus==='FAIL';
+    r.exceeds=!!r.exceeds||r.coolingExceeded;
+    if(r.coolingExceeded){
+      r.limitingFactor=[r.limitingFactor,'COOLING'].filter(Boolean).join(' / ');
+      plan.warnings.push(`Rack ${r.id}: ${r.coolingLoadKw.toFixed(1)} kW compute heat exceeds ${cdu.capacityKw} kW CDU cooling limit; reduce rack density or select a larger cooling solution.`);
+    }
+  });
+  assignments.forEach(({rack,qty})=>{
+    plan.qty+=qty;
+    const item={name:cdu.pid+' CDU',qty,ru:cdu.ru,powerW:cdu.powerW||0,weightKg:cdu.weightKg||0};
+    if(inRack){
+      if(rack.fixedRack&&!bundled){
+        // A complete rack-scale system has no free rack units for an extra CDU.
+        const cooling=buildRackLayout([{...item,role:'Cooling'}],rackU,usablePowerKw,maxWeightKg,'role');
+        cooling.forEach(r=>{r.id=racks.length+1;racks.push(r);});
+        plan.warnings.push('Rack '+rack.id+': external CDU rack required; verify manifold, rack standard and plumbing compatibility.');
+      }else{
+        rack.items.push({...item,ru:bundled?0:cdu.ru});
+        rack.usedU+=bundled?0:qty*cdu.ru;
+        rack.powerW+=qty*(cdu.powerW||0);rack.weightKg+=qty*(cdu.weightKg||0);
+        rack.cduKw=cdu.capacityKw;
+        rack.exceeds=!!rack.exceeds||rack.usedU>(rack.fixedRack?48:rackU)||rack.powerW>usablePowerKw*1000||rack.weightKg>maxWeightKg;
+        plan.bundled=bundled;
+      }
+    }
+  });
+  plan.totalPowerW=plan.qty*(cdu.powerW||0);plan.totalWeightKg=plan.qty*(cdu.weightKg||0);
+  plan.totalCapacityKw=plan.qty*cdu.capacityKw;
+  plan.coolingStatus=compute.some(r=>r.coolingExceeded)?'FAIL':compute.some(r=>r.coolingStatus==='REVIEW')?'REVIEW':'PASS';
+  if(plan.coolingStatus==='REVIEW')plan.warnings.push('Compute heat load TBD; CDU cooling adequacy cannot be verified.');
+  if(cdu.powerW===null)plan.warnings.push('CDU electrical power TBD; facility total excludes unknown CDU draw.');
+  if(cdu.weightKg===null)plan.warnings.push('CDU weight TBD; modeled weight excludes unknown CDU weight.');
+  else plan.warnings.push('CDU weights are dry; coolant and piping weight excluded.');
+  if(bundled&&!inRack)plan.warnings.push('Selected M1 rack already includes an in-rack CDU; external CDU selection requires configuration review.');
+  if(cdu.pid==='LCS-SCDU-250LP4002')plan.warnings.push('OCP/MGX rack CDU: confirm rack and manifold compatibility with selected compute system.');
+  if(cdu.placement!=='in-rack')plan.warnings.push('External CDU floor space is additional to the IT rack count.');
+  return plan;
+}
 function buildRackLayout(items,rackU,rackPowerKw,rackWeightKg,strategy){
   const racks=[];
   const newRack=role=>{const r={id:racks.length+1,role,usedU:0,powerW:0,weightKg:0,items:[]};racks.push(r);return r};
@@ -753,7 +833,7 @@ function buildRackLayout(items,rackU,rackPowerKw,rackWeightKg,strategy){
 function rackCardHtml(r,rackU,usableRackPowerKw,rackWeightKg){
   const over=r.usedU>rackU||r.powerW>usableRackPowerKw*1000||(r.weightKg>0&&r.weightKg>rackWeightKg)||r.exceeds;
   const rows=r.items.map(x=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0;border-bottom:1px solid #233143"><span>${x.qty}× ${x.name}</span><span>${x.qty*x.ru}U${x.powerW>0?` · ${((x.qty*x.powerW)/1000).toFixed(1)}kW`:''}</span></div>`).join('');
-  const cooling=r.cooling?`<div class="small" style="margin-top:6px">Cooling: <b>${r.cooling}</b>${r.cduKw?` · CDU ${r.cduKw} kW`:''}${r.heatCapturePct?` · up to ${r.heatCapturePct}% heat capture`:''}</div>`:'';
+  const cooling=(r.cooling?`<div class="small" style="margin-top:6px">Cooling: <b>${r.cooling}</b>${r.cduKw?` · CDU ${r.cduKw} kW`:''}${r.heatCapturePct?` · up to ${r.heatCapturePct}% heat capture`:''}</div>`:'')+(r.coolingStatus?`<div class="${r.coolingStatus==='FAIL'?'bad':r.coolingStatus==='REVIEW'?'warn':'small'}" style="margin-top:6px">Cooling ${r.coolingStatus}: ${r.coolingStatus==='REVIEW'?'Heat TBD':r.coolingCheckLoadKw.toFixed(1)+' / '+r.coolingCapacityKw+' kW'} · ${r.coolingScope}</div>`:'');
   const limiting=r.limitingFactor?`<div class="warn" style="margin-top:6px">Limiting factor: <b>${r.limitingFactor}</b></div>`:'';
   const weightText=r.weightKg>0?`${r.weightKg.toFixed(0)}/${rackWeightKg} kg`:'Weight TBD';
   const powerText=r.powerW>0?`${(r.powerW/1000).toFixed(1)}/${usableRackPowerKw.toFixed(1)} kW usable`:'Power TBD';
@@ -1048,7 +1128,7 @@ function vastCapacity(qty,key){
   const m=EBOX[key],n=Math.max(1,Math.floor(qty)),rebuild=n<=11?2:4,dataStrips=Math.min(146,Math.max(0,2*n-rebuild-4));
   const ec=dataStrips?4/(4+dataStrips):1, factor=(1-ec)*.92*.99*.9977;
   const rawTb=n*m.rawTb,usableTb=rawTb*factor;
-  return{rawTb,rawPb:rawTb/1000,usableTb,usablePb:usableTb/1000,usablePib:usableTb/1024}
+  return{rawTb,rawPb:rawTb/1000,usableTb,usablePb:usableTb/1000,usablePib:usableTb*1e12/(1024**5)}
 }
 function vastQtyForTarget(pb,key){for(let n=12;n<=256;n++)if(vastCapacity(n,key).usablePb>=pb)return n;return 256}
 function vastNetwork(qty){
@@ -1800,6 +1880,19 @@ function auditFabricLayout({be,fe,vn,gbMgmt,gbOob,isGb=false,frontendOver=2,dedi
   const checks=[];
   const add=(domain,status,message)=>checks.push({domain,status,message});
   if(be)add('Backend',be.portMapVerified?'PASS':'REVIEW',be.portMapVerified?'Modeled whole-link mapping fits.':'No complete port map verified; capacity estimate only.');
+  // Compare logical links, since breakout branches can reach separate peers.
+  for(const [domain,fabric,peers,speed] of [
+    ['Backend',be,be?.gb300DerivedThreeTier?3:be?.spinesPerPlane,be?.speed],
+    ['Frontend',fe,fe?.spines,400]
+  ]){
+    if(!fabric || !peers || fabric.collapsed)continue;
+    const totals=(fabric.uplinkDist||[]).map(c=>c*800/speed);
+    const uneven=[...new Set(totals.filter(t=>t%peers!==0))];
+    if(uneven.length){
+      const candidates=Array.from({length:128},(_,i)=>i+1).filter(n=>n>=2&&totals.every(t=>t%n===0));
+      add(domain,'REVIEW','Non-blocking Symmetry Warning: '+uneven.join(', ')+' logical '+speed+'G uplinks per leaf do not divide evenly across '+peers+' spines. Consider divisor spine counts '+(candidates.join(', ')||'(none within modeled radix)')+'; revalidate port capacity and reference architecture. Unequal path bandwidth may affect ECMP or packet spraying; collective latency requires workload validation.');
+    }
+  }
   if(be?.railCount===4)add('Backend rails',be.railMappingVerified?'PASS':'REVIEW','Four GPU-position rails per plane; 18 GPUs per rail per NVL72 rack.');
   if(fe && fe.leaves){
     if(isGb){
@@ -1820,10 +1913,10 @@ function auditFabricLayout({be,fe,vn,gbMgmt,gbOob,isGb=false,frontendOver=2,dedi
     const leafFits=groups.every((n,i)=>n+uplinks[2*i]<=32 && n+uplinks[2*i+1]<=32);
     add('Storage',leafFits?'PASS':'FAIL','Per-storage-leaf host plus uplink occupancy checked against 32 x 400G physical ports.');
     const receivingSpines=dedicated?2:fe?.spines||0;
-    const capacity=receivingSpines*(isGb?128:64);
+    const capacity=receivingSpines*(isGb&&!dedicated?128:64);
     const occupied=dedicated?0:(fe?.physicalUplinkLinks||0)*(isGb?2:1);
-    const extra=vn.totalUplinkLinks+(isGb?(gbMgmt?.uplink400Links||0):0);
-    const reserved=fe?.portMapVerified && (fe.external400||0)>=extra;
+    const extra=vn.totalUplinkLinks+(isGb&&!dedicated?(gbMgmt?.uplink400Links||0):0);
+    const reserved=!dedicated && fe?.portMapVerified && (fe.external400||0)>=extra;
     add('Shared spine',receivingSpines && occupied+extra<=capacity?(reserved?'PASS':'REVIEW'):'FAIL','400G port demand '+(occupied+extra)+' / '+capacity+' across receiving spines; '+(reserved?'external capacity reserved in the per-spine physical port budget.':'per-peer placement and breakout packing require validation.'));
   }
   if(gbMgmt?.leaves){
@@ -2505,7 +2598,7 @@ function calc(){
   }else be=makeBackend(nodes);
 
   const computeServerCount=nodes*(rubinRackPid?9:1);
-  const fe=frontendEnabled?(platform==='gb300-nvl72'?gb300ConvergedDesign(nodes,feOver,(vastEnabled?vn.totalUplinkLinks:0)+(mgmtEnabled?4:0)):frontendDesign(computeServerCount,mgmt,feLinks,feOver,vastEnabled&&$('storageSpines').value!=='dedicated'?vn.totalUplinkLinks:0)):zeroFrontend();
+  const fe=frontendEnabled?(platform==='gb300-nvl72'?gb300ConvergedDesign(nodes,feOver,(vastEnabled&&$('storageSpines').value!=='dedicated'?vn.totalUplinkLinks:0)+(mgmtEnabled?4:0)):frontendDesign(computeServerCount,mgmt,feLinks,feOver,vastEnabled&&$('storageSpines').value!=='dedicated'?vn.totalUplinkLinks:0)):zeroFrontend();
   const gb300MgmtFabric=platform==='gb300-nvl72'&&mgmtEnabled?gb300ManagementFabric(mgmt):{leaves:0,host200Ports:0,switchBreakoutOptics:0,uplink400Links:0,hostCables:0};
   let gb300Oob={overrideMode:'auto',selectedMode:'direct',inRackMgmtSwitches:0,rackTor100gLinks:0,rackUplinkSpeedG:100,rackSideOpticPid:'QSFP-100G-DR-S=',aggregationOpticPid:'',aggregationSwitches:0,aggregationPid:'',aggregationLabel:'',aggregationLinks:0,peerLinks:0,rackTorOptics:0,rackTorCables:0,lowSpeedLeaves:0,lowSpeedUplinkLinks:0,oobSpines:0,stpCapacityExceeded:false,storageServerEndpoints:0,managementServerEndpoints:0,ndEndpoints:0,switchMgmtEndpoints:0,externalLowSpeedEndpoints:0};
   const vastCapacityLicenses=vastEnabled?Math.ceil(vc.usableTb):0,vastCoreLicenses=vastEnabled?eq*eboxCpuCores:0,vastInstallServiceQty=vastEnabled?Math.max(1,Math.ceil(eq/12)):0;
@@ -2628,7 +2721,7 @@ function calc(){
     const wt=(weightBasis==='gross'&&spec.weightGrossKg)?spec.weightGrossKg:(spec.weightNetKg||0);
     const powerKnown=pw>0,weightKnown=wt>0;
     if(!powerKnown&&!weightKnown)return;
-    physRows.push({name,qty,powerW:pw,totalPowerW:qty*pw,weightKg:wt,totalWeightKg:qty*wt,powerKnown,weightKnown,source:spec.source});
+    physRows.push({name,qty,powerW:pw,totalPowerW:qty*pw,weightKg:wt,totalWeightKg:qty*wt,powerKnown,weightKnown,isNetwork:Object.values(PHYSICAL.switch).includes(spec),source:spec.source});
   }
   pRow(serverSpec.name,nodes,{...serverSpec,powerTypicalW:null});
   pRow(`${pid} backend leaves`,be.totalLeaves,PHYSICAL.switch[pid]);
@@ -2660,8 +2753,12 @@ function calc(){
   const rackU=+$('rackU').value||48,rackPowerKw=+$('rackPowerLimit').value||60,rackWeightKg=+$('rackWeightLimitKg').value||1360.78,rackStrategy=$('rackStrategy').value||'role';
   const rackUtilization=+$('rackUtilization').value||0.9;
   const usableRackPowerKw=rackPowerKw*rackUtilization;
-  const cduCapacityKw=+$('cduCapacity').value||250;
-  const isLiquid=platform==='supermicro-b300'&&coolingType!=='air';
+  const cdu=cduSelection(platform,coolingType,$('cduPid')?.value,!!$('includeCdu')?.checked,$('cduPowerOverrideKw')?.value||'');
+  if($('cduOptions'))$('cduOptions').style.display=cdu.eligible?'':'none';
+  if($('cduFields'))$('cduFields').style.display=cdu.enabled?'':'none';
+  if($('cduPowerOverrideKw'))$('cduPowerOverrideKw').disabled=cdu.pid!=='LCS-SCDU-250L4002';
+  const cduCapacityKw=cdu.enabled?cdu.capacityKw:(+$('cduCapacity').value||250);
+  const isLiquid=cdu.eligible;
   const swPower=spec=>(powerBasis==='typical'&&spec.powerTypicalW)?spec.powerTypicalW:spec.powerMaxW;
   const rackItems=[
     {name:serverSpec.name,qty:nodes,ru:serverSpec.ru,powerW:serverPowerW,weightKg:serverWeightKg,role:'Compute'},
@@ -2699,13 +2796,16 @@ function calc(){
     const otherRacks=buildRackLayout(otherItems,rackU,usableRackPowerKw,rackWeightKg,rackStrategy);
     otherRacks.forEach((r,i)=>r.id=computeRacks.length+i+1);
     racks=[...computeRacks,...otherRacks];
-  }else if(platform==='supermicro-b300'){
-    const refMax=serverSpec.maxNodesPerRackRef||999;
-    const effectiveCoolingKw=isLiquid?Math.min(usableRackPowerKw,cduCapacityKw):usableRackPowerKw;
-    const maxByPower=Math.max(1,Math.floor((effectiveCoolingKw*1000)/serverSpec.powerMaxW));
-    const maxByRU=Math.max(1,Math.floor(rackU/serverSpec.ru));
-    const maxByWeight=Math.max(1,Math.floor(rackWeightKg/serverWeightKg));
-    const perRack=Math.max(1,Math.min(refMax,maxByPower,maxByRU,maxByWeight));
+  }else if(platform==='supermicro-b300'||platform==='rubin-hgx'){
+    const refMax=serverSpec.maxNodesPerRackRef||(platform==='rubin-hgx'?9:999);
+    const reserveCdu=cdu.enabled&&cdu.placement==='in-rack';
+    const reservePowerW=reserveCdu?(cdu.powerW||0):0;
+    const reserveU=reserveCdu?cdu.ru:0,reserveWeight=reserveCdu?(cdu.weightKg||0):0;
+    const maxByPower=Math.max(1,Math.floor((usableRackPowerKw*1000-reservePowerW)/serverSpec.powerMaxW));
+    const maxByCooling=isLiquid?Math.max(0,Math.floor(cduCapacityKw*1000/serverSpec.powerMaxW)):Infinity;
+    const maxByRU=Math.max(1,Math.floor((rackU-reserveU)/serverSpec.ru));
+    const maxByWeight=Math.max(1,Math.floor((rackWeightKg-reserveWeight)/serverWeightKg));
+    const perRack=Math.max(1,Math.min(refMax,maxByPower,maxByRU,maxByWeight,maxByCooling));
     const computeRacks=[];
     let left=nodes;
     while(left>0){
@@ -2720,7 +2820,7 @@ function calc(){
           perRack===maxByPower?'POWER':null,
           perRack===maxByRU?'RU':null,
           perRack===maxByWeight?'WEIGHT':null,
-          isLiquid&&effectiveCoolingKw===cduCapacityKw&&perRack===maxByPower?'COOLING':null
+          isLiquid&&perRack>=maxByCooling?'COOLING':null
         ].filter(Boolean).join(' / ')||'POWER'
       });
       left-=qty;
@@ -2730,14 +2830,17 @@ function calc(){
     otherRacks.forEach((r,i)=>r.id=computeRacks.length+i+1);
     racks=[...computeRacks,...otherRacks];
   }
+  const cduPlan=applyCduToRacks(racks,cdu,rackU,usableRackPowerKw,rackWeightKg,!!rackScalePid&&rackScalePid.endsWith('-M1'));
+  if(cduPlan.qty)physRows.push({name:cdu.pid+' CDU',qty:cduPlan.qty,powerW:cdu.powerW||0,totalPowerW:cduPlan.totalPowerW,weightKg:cdu.weightKg||0,totalWeightKg:cduPlan.totalWeightKg,powerKnown:cdu.powerW!==null,weightKnown:cdu.weightKg!==null,source:cdu.source});
+  if($('cduSummary'))$('cduSummary').textContent=cduPlan.qty?`Cooling ${cduPlan.coolingStatus}: ${cduPlan.heatKw.toFixed(1)} / ${cduPlan.totalCapacityKw} kW total heat/capacity. ${cduPlan.qty} × ${cdu.pid} · ${cdu.capacityKw} kW cooling/unit · ${cdu.powerW===null?'Electrical power TBD':(cduPlan.totalPowerW/1000).toFixed(1)+' kW total CDU electrical load'} · ${cdu.placement}. Cooling load conservatively uses 100% of modeled compute peak; CDU electrical draw is additional. ${cduPlan.warnings.join(' ')}`:'CDU excluded from this model; cooling must be provided separately.';
   window.LAST_RACKS=racks;
   const totalFacilityPowerW=physRows.reduce((s,r)=>s+r.totalPowerW,0);
   const totalFacilityWeightKg=physRows.reduce((s,r)=>s+r.totalWeightKg,0);
   const computePowerW=nodes*serverPowerW;
-  const switchPowerW=physRows.filter(r=>r.name.includes('N9K')||r.name.includes('N9164')||r.name.includes('N9364')).reduce((s,r)=>s+r.totalPowerW,0);
+  const switchPowerW=physRows.filter(r=>r.isNetwork).reduce((s,r)=>s+r.totalPowerW,0);
   const storageNodePowerW=vastEnabled?eq*serverPeakPowerSpec(PHYSICAL.storage["UCSC-C225M8N-EBOX"]).powerMaxW:0;
   const computeWeightKg=nodes*serverWeightKg;
-  const switchWeightKg=physRows.filter(r=>r.name.includes('N9K')||r.name.includes('N9164')||r.name.includes('N9364')).reduce((s,r)=>s+r.totalWeightKg,0);
+  const switchWeightKg=physRows.filter(r=>r.isNetwork).reduce((s,r)=>s+r.totalWeightKg,0);
   const storageNodeWeightKg=vastEnabled?eq*PHYSICAL.storage["UCSC-C225M8N-EBOX"].weightNetKg:0;
   const ndPowerW=ndNodeCount*serverPeakPowerSpec(PHYSICAL.management["ND-NODE-G5S"]).powerMaxW;
   const ndWeightKg=ndNodeCount*PHYSICAL.management["ND-NODE-G5S"].weightNetKg;
@@ -2778,10 +2881,10 @@ function calc(){
   const overRacks=racks.filter(r=>r.usedU>rackU||r.powerW>usableRackPowerKw*1000||r.weightKg>rackWeightKg||r.exceeds);
   const roleCounts={};racks.forEach(r=>roleCounts[r.role]=(roleCounts[r.role]||0)+1);
   $('rackSummary').innerHTML=`<b>${racks.length} racks total</b> · ${rackU}U · ${rackPowerKw} kW nameplate · ${usableRackPowerKw.toFixed(1)} kW usable (${Math.round(rackUtilization*100)}%) · ${rackWeightKg} kg/rack · ${rackStrategy==='balanced'?'Balanced packing':'Role-separated'}<br>${Object.entries(roleCounts).map(([k,v])=>`${k}: ${v}`).join(' · ')}`;
-  $('rackWarnings').innerHTML=overRacks.length?`<span class="bad"><b>${overRacks.length} rack(s) exceed a constraint.</b></span>`:`<span class="good"><b>PASS:</b> All racks are within RU, power, and weight constraints.</span>`;
+  $('rackWarnings').innerHTML=overRacks.length?`<span class="bad"><b>${overRacks.length} rack(s) exceed a constraint${cduPlan.coolingStatus==='FAIL'?' (including cooling)':''}.</b></span>`:cduPlan.coolingStatus==='REVIEW'?'<span class="warn"><b>REVIEW:</b> Cooling heat load TBD; RU, power and weight checked.</span>':`<span class="good"><b>PASS:</b> All racks are within RU, power, weight${cduPlan.qty?' and modeled CDU cooling':''} constraints.</span>`;
   $('rackLayoutGrid').innerHTML=racks.map(r=>rackCardHtml(r,rackU,usableRackPowerKw,rackWeightKg)).join('');
 
-  $('facilityMetrics').innerHTML=`<b>Compute cooling:</b> ${serverSpec.cooling||'Platform-defined'}${isLiquid?` · ${cduCapacityKw} kW CDU basis`:''}<br><b>Total modeled facility load:</b> ${(totalFacilityPowerW/1000).toFixed(1)} kW<br>
+  $('facilityMetrics').innerHTML=`<b>Compute cooling:</b> ${serverSpec.cooling||'Platform-defined'}${isLiquid?` · ${cduCapacityKw} kW CDU basis`:''}<br><b>Total modeled facility load:</b> ${(totalFacilityPowerW/1000).toFixed(1)} kW${cduPlan.qty&&cdu.powerW===null?' (incomplete: CDU electrical draw TBD)':''}<br><b>CDU electrical load:</b> ${cduPlan.qty?(cdu.powerW===null?'TBD':(cduPlan.totalPowerW/1000).toFixed(1)+' kW'):'Excluded'}<br>
   <b>Total installed equipment weight:</b> ${totalFacilityWeightKg.toFixed(2)} kg / ${(totalFacilityWeightKg/1000).toFixed(2)} metric tons<br>
   Compute: ${(computePowerW/1000).toFixed(1)} kW / ${computeWeightKg.toFixed(2)} kg ·
   Switches: ${(switchPowerW/1000).toFixed(1)} kW / ${switchWeightKg.toFixed(2)} kg ·
@@ -2799,6 +2902,7 @@ function calc(){
     <td>${r.source}</td></tr>`).join('');
 
   BOM=[];
+  if(cduPlan.qty&&!cduPlan.bundled)add('Liquid Cooling CDU',cdu.pid,'Supermicro '+cdu.placement+' coolant distribution unit',cduPlan.qty,`${cdu.capacityKw} kW cooling/unit; ${cdu.powerW===null?'electrical power TBD':cdu.powerW/1000+' kW electrical/unit'}; ${cdu.placement==='in-row'?'shared capacity-sized group':'one CDU per compute rack'}; cooling ${cduPlan.coolingStatus}; no additional standby units`,cdu.source);
   if(suMode!=='off')add('Scale Unit Planning','SU-PLANNING',`${suPlan.suNodes}-node / ${suPlan.suNodes*customGpusPerNode}-GPU Scale Unit`,suPlan.suCount,`${requestedNodes} requested nodes → ${nodes} deployed; ${suFabric==='independent'?'independent backend fabric per SU':'shared cluster fabric'}`,suMode==='cvd4'&&!isCustom?'CVD starting-point scale unit':'Engineering planning group');
   if(computeCcw){
     add('Compute MLB',computeMlb,'UCS M8 Dense GPU Server Major Line Bundle',1,`${nodes} deployed GPU servers; select ${computeAto||'ATO in CCW'} inside the MLB configurator`,'Cisco UCS rack server ordering guide');
@@ -2868,6 +2972,11 @@ function calc(){
   }else add('AI Backend Optics',backendHost800Pid,backendHost800Desc,be.hostOptics,`1 physical 800G optic per GPU · media matched to ${backendOpticPid} (${backendOpticMedia}, ${backendOpticReach})`,backendOpticIsVr8?'Validated ConnectX-8 800GE RHS module family; confirm exact server qualification':'Validated ConnectX-8 800GE RHS module family; confirm exact server qualification');
   const opticFamily=backendOpticIsVr8?'VR8':'DR8';
   const switchBreakoutDesc=be.speed===200?`800G ${opticFamily} switch-side host-facing 4×200G breakout optic`:be.speed===400?`800G ${opticFamily} switch-side host-facing 2×400G breakout optic`:`800G ${opticFamily} switch-side host-facing optic`;
+  if(!be.gb300Nvl72Ra && !backendOpticIsVr8 && be.speed===400 && be.hostInterfaceSpeed===400 && be.physicalHostLinks===be.hostOptics){
+    add('AI Backend Cabling','CB-M12-M12-SMF','MPO-12 SMF host-to-leaf 400G branch cable',be.physicalHostLinks,
+      'One cable per active 400G DR4 host link; dual-MPO DR8 switch optic provides two independent branches. Switch optics rounded per leaf/plane.',
+      'Planning cable family; validate exact connectors, polarity, reach and NIC interoperability in CCW');
+  }
   add('AI Backend Optics',backendOpticPid,switchBreakoutDesc,be.switchHostOptics,`${backendOpticMedia} · ${backendOpticReach} · 800G-equivalent physical ports rounded independently on each leaf/plane`,tmgStatus(pid,backendOpticPid));
   add('AI Backend Optics',backendOpticPid,`800G ${opticFamily} leaf-spine optical endpoint (breakout as required)`,be.leafSpineOptics,`${be.physicalLeafSpineLinks} 800G-equivalent links × 2 endpoints · ${be.logicalLeafSpineLinks||0} logical ${be.speed}G links · ${backendOpticMedia} · ${backendOpticReach}`,tmgStatus(pid,backendOpticPid));
   if(be.gb300Nvl72Ra){
@@ -2950,7 +3059,7 @@ function calc(){
     add('VAST EBox Optics','QSFP-200G-SR4-S=','200G EBox-side optic',eq*4,'2 internal + 2 external per EBox','TMG switch-side qualified; validate EBox adapter side');
     add('VAST EBox Optics','QDD-400G-SR8-S=','400G storage-leaf 2×200G breakout optic',eq*2,'2 switch-side breakout optics/EBox',tmgStatus('N9K-C9332D-GX2B','QDD-400G-SR8-S='));
     add('VAST EBox Cabling','CB-M16-M12-MMF','MPO-16 to dual MPO-12 MMF breakout cable',eq*2,'1 breakout cable per 400G SR8 switch optic · 2 per EBox','Cisco GB300/VAST RA cable family; validate reach');
-    if(platform==='gb300-nvl72'){
+    if(platform==='gb300-nvl72'&&!dedicated){
       add('VAST Uplink Optics','QDD-400G-DR4-S=','400G storage-leaf uplink optic',vn.totalUplinkLinks,`${vn.totalUplinkLinks} × 400G leaf uplinks (${vn.uplinksPerSwitch.join('/')} per storage leaf)`,'Cisco GB300 NVL72 Cloud RA storage bandwidth rule');
       add('VAST Uplink Optics','OSFP-800G-DR8=','800G converged-spine optic used as 2×400G storage breakout',Math.ceil(vn.totalUplinkLinks/2),`${vn.totalUplinkLinks} × 400G storage uplinks packed 2 per 800G spine optic`,'Cisco GB300 NVL72 RA');
       add('VAST Uplink Cabling','CB-M12-M12-SMF','MPO-12 SMF cable — storage leaf to converged spine',vn.totalUplinkLinks,`${vn.totalUplinkLinks} × 400G storage uplinks`,'Cisco GB300 NVL72 RA');
@@ -3046,6 +3155,8 @@ function calc(){
   $('bomBody').innerHTML=BOM.map(x=>`<tr><td>${x.cat}</td><td class="mono">${x.pid}</td><td>${x.desc}</td><td>${x.required??x.qty}</td><td>${x.spare??0}</td><td><b>${x.total??x.qty}</b></td><td>${x.basis}</td><td><span class="tag">${x.status}</span></td></tr>`).join('');
 
   const q=[];
+  if(cduPlan.qty)q.push(`<b class="${cduPlan.coolingStatus==='FAIL'?'bad':cduPlan.coolingStatus==='REVIEW'?'warn':'good'}">${cduPlan.coolingStatus}</b> CDU cooling: ${cduPlan.heatKw.toFixed(1)} kW compute heat / ${cduPlan.totalCapacityKw} kW total cooling capacity; local rack limits checked individually. Heat basis: 100% modeled compute peak.`);
+  if(cduPlan.qty)cduPlan.warnings.forEach(w=>q.push(`<b class="warn">CHECK</b> ${w}`));
   q.push('<b class="good">PLANNING</b> Server peak power is sized at 125% of base maximum (25% headroom). This allowance is applied once; it is separate from rack utilization and is not a measured transient-spike guarantee. Unknown server power remains TBD.');
   if(be.railCount===4)q.push(`<b class="${be.railMappingVerified?'good':'warn'}">${be.railMappingVerified?'PASS':'CHECK'}</b> NVL72 four rails per plane: GPU positions 1-4 across 18 trays = 18 GPUs/rail/rack; ${be.leavesPerRailPerPlane} leaves/rail/plane. ${be.railBasis}.`);
   if(platform==='gb300-nvl72'){
@@ -3213,7 +3324,7 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
   if(platform==='supermicro-b300'){
     q.push(`<b class="good">PASS</b> Supermicro cooling selection resolves to ${serverSpec.name}: ${serverSpec.ru}U, ${serverWeightKg} kg on selected weight basis.`);
     if(coolingType==='air')q.push(`<b class="good">PASS</b> Air-cooled reference density capped at 4 B300 systems/rack.`);
-    else q.push(`<b class="good">PASS</b> Liquid-cooled reference density capped at 8 B300 systems/rack and checked against ${cduCapacityKw} kW CDU capacity.`);
+    else q.push(`<b class="${cduPlan.coolingStatus==='FAIL'?'bad':'good'}">${cduPlan.coolingStatus==='FAIL'?'FAIL':'PASS'}</b> Liquid-cooled reference density capped at 8 B300 systems/rack and checked against ${cduCapacityKw} kW CDU capacity.`);
     if(coolingType==='liquid-alc')q.push(`<b class="good">PASS</b> ALC model notes up to 95% cold-plate heat capture.`);
   }
 
@@ -3226,6 +3337,13 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
   }
 
   const layoutAudit=auditFabricLayout({be,fe:frontendEnabled?fe:null,vn:vastEnabled?vn:null,gbMgmt:platform==='gb300-nvl72'&&mgmtEnabled?gb300MgmtFabric:null,gbOob:platform==='gb300-nvl72'&&oobEnabled?gb300Oob:null,isGb:platform==='gb300-nvl72',frontendOver:feOver,dedicated,oob:oobEnabled?{capacityExceeded:oobSpineCapacityExceeded}:null});
+  const storageTargetPb=vastEnabled&&$('vastMode').value==='target'?Math.max(.1,+$('targetPb').value||1):null;
+  const storageTargetMet=storageTargetPb===null?null:vc.usablePb>=storageTargetPb;
+  if(storageTargetMet===false){
+    layoutAudit.checks.push({domain:'Storage capacity',status:'FAIL',message:`Requested ${storageTargetPb} PB usable exceeds ${vc.usablePb.toFixed(3)} PB available at the 256-EBox sizing limit.`});
+    layoutAudit.status='FAIL';
+    $('vastMetrics').innerHTML+=`<br><b class="bad">FAIL: Target ${storageTargetPb} PB is not met; the 256-EBox model provides ${vc.usablePb.toFixed(3)} PB usable.</b>`;
+  }
   layoutAudit.checks.forEach(c=>q.push('<b class="'+(c.status==='FAIL'?'bad':c.status==='REVIEW'?'warn':'good')+'">LAYOUT '+c.status+'</b> '+c.domain+': '+c.message));
   const layoutIssues=layoutAudit.checks.filter(c=>c.status!=='PASS').map(c=>c.domain+': '+c.message).join(' / ');
   if(layoutAudit.status!=='PASS')BOM.forEach(row=>{
@@ -3267,6 +3385,13 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
         baselineSplit:mgmtEnabled?'3 control-plane nodes + 2 cluster-management head nodes':'Disabled'
       },
       facility:{
+        cduIncluded:cduPlan.enabled,
+        cduPid:cduPlan.enabled?cduPlan.pid:null,
+        cduQuantity:cduPlan.qty,
+        cduPowerKnown:!cduPlan.qty||cduPlan.powerW!==null,
+        coolingStatus:cduPlan.coolingStatus,
+        coolingHeatKw:cduPlan.heatKw,
+        coolingCapacityKw:cduPlan.totalCapacityKw,
         rackSizeU:rackU,
         usableRackPowerKw:usableRackPowerKw,
         maxRackWeightKg:rackWeightKg,
@@ -3349,6 +3474,8 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
       leafSpineCables:fe.leafSpineCables||0
     },
     storage:{
+      targetPb:storageTargetPb,
+      capacityTargetMet:storageTargetMet,
       enabled:vastEnabled,
       eboxes:vastEnabled?eq:0,
       usablePb:vastEnabled?vc.usablePb:0,
@@ -3383,7 +3510,8 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
       fabricMode:suFabric
     },
     facility:{
-      racks:racks.map(r=>({id:r.id,role:r.role,usedU:r.usedU,powerKw:r.powerW/1000,weightKg:r.weightKg,fixedRack:!!r.fixedRack,items:r.items})),
+      cdu:cduPlan,
+      racks:racks.map(r=>({id:r.id,role:r.role,usedU:r.usedU,powerKw:r.powerW/1000,weightKg:r.weightKg,fixedRack:!!r.fixedRack,items:r.items,exceeds:!!r.exceeds,coolingStatus:r.coolingStatus,coolingExceeded:!!r.coolingExceeded,coolingLoadKw:r.coolingLoadKw,coolingCheckLoadKw:r.coolingCheckLoadKw,coolingCapacityKw:r.coolingCapacityKw,coolingScope:r.coolingScope})),
       rackCount:racks.length,
       rackU:rackU,
       usableRackPowerKw:usableRackPowerKw,
@@ -3418,6 +3546,7 @@ const PPT_SLIDES=[
   {id:'management',label:'Management Fabric Detail',desc:'Detailed visual for control, cluster management and OOB fabric.',defaultOn:true,feature:'management'},
   {id:'scale',label:'Scale Unit & Growth',desc:'Scale-unit count, growth increment and requested versus deployed capacity.',defaultOn:true},
   {id:'facility',label:'Rack / Facility Design',desc:'Rack count, rack constraints, role distribution and facility totals.',defaultOn:true},
+  {id:'racklayouts',label:'Sample Rack Layouts',desc:'One to three actual racks per type, with editable equipment blocks and rack constraints.',defaultOn:true},
   {id:'power',label:'Power Summary',desc:'Compute, network, storage and management power contribution.',defaultOn:true},
   {id:'bom',label:'BOM / Ordering Summary',desc:'Major hardware, optics, MLB and licensing quantities.',defaultOn:false},
   {id:'validation',label:'Validation & Design Notes',desc:'Engineering checks, assumptions and items requiring final validation.',defaultOn:false}
@@ -3465,7 +3594,7 @@ function applyPptPreset(name){
   };
   let ids=[];
   if(name==='executive')ids=['title','assumptions','summary','overallfabric','backend','facility','power'];
-  if(name==='customer')ids=['title','assumptions','summary','overallfabric','compute','backend','frontend','storage','management','scale','facility','power'];
+  if(name==='customer')ids=['title','assumptions','summary','overallfabric','compute','backend','frontend','storage','management','scale','facility','racklayouts','power'];
   if(name==='engineering')ids=PPT_SLIDES.map(x=>x.id);
   if(name==='all')ids=PPT_SLIDES.map(x=>x.id);
   if(name==='none')ids=[];
@@ -3474,8 +3603,43 @@ function applyPptPreset(name){
 function getSelectedPptSlides(){
   return [...document.querySelectorAll('.ppt-slide-check:checked')].map(x=>x.dataset.slide);
 }
+function pptRackSamples(racks){
+  const groups=new Map();
+  racks.forEach(r=>{const key=r.role||'Mixed';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r);});
+  return [...groups].map(([type,all])=>({type,total:all.length,racks:all.length<=3?all:[all[0],all[Math.floor((all.length-1)/2)],all[all.length-1]]}));
+}
+function pptAddRackLayouts(pptx,d){
+  pptRackSamples(d.facility.racks).forEach(group=>{
+    const s=pptx.addSlide();
+    pptAddHeader(s,`${group.type} Rack Layouts`,`${group.racks.length} sample rack(s) of ${group.total} in this type. Grouped equipment blocks; illustrative placement, not an installation elevation.`);
+    group.racks.forEach((r,i)=>{
+      const x=.55+i*3.05,w=2.8,top=2.15,height=3.75;
+      const capacity=r.fixedRack?r.usedU:d.facility.rackU;
+      const scale=Math.max(capacity,r.usedU,1);
+      const over=r.usedU>capacity||r.powerKw>d.facility.usableRackPowerKw||r.weightKg>d.facility.rackWeightKg||r.exceeds||r.coolingExceeded;
+      s.addText(`Rack ${r.id}${r.fixedRack?' · Dedicated':''}`,{x,y:1.36,w,h:.3,fontFace:'Aptos',fontSize:14,bold:true,color:'F4FAFF',margin:0});
+      s.addText(`${r.usedU}/${capacity}U · ${r.powerKw>0?r.powerKw.toFixed(1)+' kW':'Power TBD'} · ${r.weightKg>0?r.weightKg.toFixed(0)+' kg':'Weight TBD'}`,{x,y:1.76,w,h:.24,fontFace:'Aptos',fontSize:10,color:'B9CCDC',margin:0});
+      s.addShape(PPTX_SHAPE.rect,{x,y:top,w,h:height,fill:{color:'091B2D'},line:{color:over?'EF6666':'52748E',width:1}});
+      let used=0;
+      r.items.forEach((item,j)=>{
+        const units=item.qty*item.ru;
+        if(units<=0)return;
+        const h=height*units/scale,y=top+height-height*(used+units)/scale;
+        s.addShape(PPTX_SHAPE.rect,{x:x+.05,y,w:w-.1,h,fill:{color:j%2?'173D57':'12516A'},line:{color:'52748E',width:.5}});
+        // Small blocks use a key below the rack instead of unreadable labels.
+        s.addText(h>=.3?`${j+1}. ${item.qty} × ${item.name} (${units}U)`:`${j+1}`,{x:x+.09,y:y+.01,w:w-.18,h:Math.max(.06,h-.02),fontFace:'Aptos',fontSize:h>=.3?10:7,color:'F4FAFF',margin:0,breakLine:false,fit:'shrink'});
+        used+=units;
+      });
+      if(capacity>used)s.addText(`${capacity-used}U free`,{x:x+.1,y:top+.05,w:w-.2,h:.22,fontFace:'Aptos',fontSize:10,color:'91A9BE',margin:0});
+      s.addText(r.items.map((item,j)=>`${j+1}. ${item.qty} × ${item.name} · ${item.ru===0?'included in rack':item.qty*item.ru+'U'}`).join('\n'),{x,y:6.02,w,h:.65,fontFace:'Aptos',fontSize:9,color:'D6E5F2',margin:0,fit:'shrink'});
+      s.addText(r.coolingStatus?`Cooling ${r.coolingStatus}: ${r.coolingStatus==='REVIEW'?'Heat TBD':r.coolingCheckLoadKw.toFixed(1)+' / '+r.coolingCapacityKw+' kW'} · ${r.coolingScope}${over?' · Constraint exceeded':''}`:over?'Constraint exceeded':`Limits: ${d.facility.usableRackPowerKw.toFixed(1)} kW · ${d.facility.rackWeightKg.toLocaleString()} kg`,{x,y:6.78,w,h:.22,fontFace:'Aptos',fontSize:9,color:over?'EF6666':'91A9BE',margin:0,fit:'shrink'});
+    });
+    pptAddFooter(s,d);
+  });
+}
 function updatePptSelectionSummary(){
-  const n=getSelectedPptSlides().length;
+  const selected=getSelectedPptSlides();
+  const n=selected.length+(selected.includes('racklayouts')?pptRackSamples(window.DESIGN_STATE?.facility?.racks||[]).length-1:0);
   if($('pptSelectionSummary'))$('pptSelectionSummary').textContent=`${n} slide${n===1?'':'s'} selected. Slides are generated as editable native PowerPoint objects.`;
 }
 
@@ -3910,30 +4074,32 @@ async function exportDesignPptx(){
         pptDrawNode(s,x,y,1.8,.72,k,`${v} rack${v===1?'':'s'}`,'10283D');
       });
       pptBulletBlock(s,.75,5.55,8.55,1.05,'Facility envelope',[
-        `${d.facility.totalPowerKw.toFixed(1)} kW modeled facility load`,
+        `${d.facility.totalPowerKw.toFixed(1)} kW modeled facility load${d.facility.cdu?.qty&&d.facility.cdu.powerW===null?' (CDU power TBD)':''}`,
         `${d.facility.rackWeightKg.toLocaleString()} kg maximum rack weight`,
-        'Fixed rack-scale systems are never co-packed with another rack-scale compute system'
+        d.facility.cdu?.qty?`Cooling ${d.facility.cdu.coolingStatus}: ${d.facility.cdu.heatKw.toFixed(1)} / ${d.facility.cdu.totalCapacityKw} kW total; ${d.facility.cdu.qty} × ${d.facility.cdu.pid}; local limits checked per rack`:'Fixed rack-scale systems are never co-packed with another rack-scale compute system'
       ]);
       pptAddFooter(s,d);
     };
     const addPower=()=>{
       const s=pptx.addSlide(); pptAddHeader(s,'Power Summary','Modeled IT load by major subsystem.');
+      if(d.facility.cdu?.qty)s.addNotes(`CDU: ${d.facility.cdu.qty} × ${d.facility.cdu.pid}. ${d.facility.cdu.source}. ${d.facility.cdu.warnings.join(' ')}`);
       const vals=[
         ['Compute',d.facility.computePowerKw],
         ['Network',d.facility.switchPowerKw],
         ['Storage',d.facility.storagePowerKw],
         ['Management',d.facility.managementPowerKw],
-        ['Nexus Dashboard',d.facility.nexusDashboardPowerKw]
+        ['Nexus Dashboard',d.facility.nexusDashboardPowerKw],
+        ['CDU',d.facility.cdu?.totalPowerW/1000||0]
       ];
       const max=Math.max(1,...vals.map(x=>x[1]));
       vals.forEach((x,i)=>{
-        const y=1.55+i*.9;
+        const y=1.55+i*.72;
         s.addText(x[0],{x:.8,y:y+.1,w:1.45,h:.24,fontFace:'Aptos',fontSize:11,color:'DCE8F4',margin:0});
         s.addShape(PPTX_SHAPE.rect,{x:2.4,y:y+.08,w:5.5,h:.3,fill:{color:'17324A'},line:{color:'17324A'}});
         s.addShape(PPTX_SHAPE.rect,{x:2.4,y:y+.08,w:5.5*(x[1]/max),h:.3,fill:{color:'1FA8D4'},line:{color:'1FA8D4'}});
-        s.addText(`${x[1].toFixed(1)} kW`,{x:8.08,y:y+.06,w:1.0,h:.25,fontFace:'Aptos',fontSize:10.5,color:'F4F9FD',margin:0,align:'right'});
+        s.addText(x[0]==='CDU'&&d.facility.cdu?.qty&&d.facility.cdu.powerW===null?'TBD':`${x[1].toFixed(1)} kW`,{x:8.08,y:y+.06,w:1.0,h:.25,fontFace:'Aptos',fontSize:10.5,color:'F4F9FD',margin:0,align:'right'});
       });
-      pptCard(s,3.2,6.05,3.6,.85,'Total modeled facility load',`${d.facility.totalPowerKw.toFixed(1)} kW`,'Maximum / selected planning basis');
+      pptCard(s,3.2,6.05,3.6,.85,'Total modeled facility load',`${d.facility.totalPowerKw.toFixed(1)} kW`,d.facility.cdu?.qty&&d.facility.cdu.powerW===null?'Incomplete: CDU electrical draw TBD':'Maximum / selected planning basis');
       pptAddFooter(s,d);
     };
     const addBom=()=>{
@@ -3959,7 +4125,7 @@ async function exportDesignPptx(){
       pptAddFooter(s,d);
     };
 
-    const builders={title:addTitle,assumptions:addAssumptions,summary:addSummary,overallfabric:addOverallFabric,compute:addCompute,backend:addBackend,frontend:addFrontend,storage:addStorage,management:addManagement,scale:addScale,facility:addFacility,power:addPower,bom:addBom,validation:addValidation};
+    const builders={title:addTitle,assumptions:addAssumptions,summary:addSummary,overallfabric:addOverallFabric,compute:addCompute,backend:addBackend,frontend:addFrontend,storage:addStorage,management:addManagement,scale:addScale,facility:addFacility,racklayouts:()=>pptAddRackLayouts(pptx,d),power:addPower,bom:addBom,validation:addValidation};
     selected.forEach(id=>{if(builders[id])builders[id]()});
     const filename=`${customerFilePrefix()}Cisco_Secure_AI_Factory_Design_${d.solution.totalGpus}GPU.pptx`;
     await pptx.writeFile({fileName:filename});
@@ -4183,8 +4349,8 @@ function exportCsv(){
   BOM.forEach((x,i)=>{s+=`${i+1},${e(x.cat)},${e(x.pid)},${x.required??x.qty},${x.spare??0},${x.total??x.qty},${e(x.desc)},${e(x.basis)},${e(x.status)}\n`});
   s+='\nFacilities Summary\nComponent,Qty,PowerPerUnit_kW,TotalPower_kW,WeightPerUnit_kg,TotalWeight_kg,Source\n';
   (window.LAST_PHYS_ROWS||[]).forEach(r=>{s+=`${e(r.name)},${r.qty},${r.powerKnown===false?'TBD':(r.powerW/1000).toFixed(3)},${r.powerKnown===false?'TBD':(r.totalPowerW/1000).toFixed(3)},${r.weightKnown===false?'TBD':r.weightKg.toFixed(2)},${r.weightKnown===false?'TBD':r.totalWeightKg.toFixed(2)},${e(r.source)}\n`});
-  s+='\nRack Layout\nRack,Role,UsedU,Power_kW,Weight_kg,Cooling,CDU_kW,LimitingFactor,Items\n';
-  (window.LAST_RACKS||[]).forEach(r=>{const items=r.items.map(x=>`${x.qty}x ${x.name}`).join('; ');s+=`${r.id},${e(r.role)},${r.usedU},${(r.powerW/1000).toFixed(2)},${r.weightKg.toFixed(1)},${e(r.cooling||'')},${r.cduKw||0},${e(r.limitingFactor||'')},${e(items)}\n`});
+  s+='\nRack Layout\nRack,Role,UsedU,Power_kW,Weight_kg,Cooling,CDU_kW,LimitingFactor,Items,CoolingStatus,RackHeat_kW,CoolingCheckLoad_kW,CoolingCapacity_kW,CoolingScope\n';
+  (window.LAST_RACKS||[]).forEach(r=>{const items=r.items.map(x=>`${x.qty}x ${x.name}`).join('; ');s+=`${r.id},${e(r.role)},${r.usedU},${(r.powerW/1000).toFixed(2)},${r.weightKg.toFixed(1)},${e(r.cooling||'')},${r.cduKw||0},${e(r.limitingFactor||'')},${e(items)},${e(r.coolingStatus||'')},${r.coolingLoadKw??''},${r.coolingCheckLoadKw??''},${r.coolingCapacityKw??''},${e(r.coolingScope||'')}\n`});
   const b=new Blob([s],{type:'text/csv'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=`${customerFilePrefix()}Cisco_Secure_AI_Factory_BOM.csv`;a.click();URL.revokeObjectURL(u)
 }
 try{
