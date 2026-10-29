@@ -717,3 +717,43 @@ Each captured phase now includes an Export phase additions to CCW (XLSX) action.
 Compute selection separates modular servers from full-rack systems. Rubin NVL8 individual server retains platform key rubin-hgx and exposes only SYS222GS server PIDs (8 GPUs/unit). Rubin NVL8 full rack uses rubin-nvl8-rack and exposes only SRS-RUBIN-NVL8 rack PIDs (9 servers / 72 GPUs/unit). The deployment model, not an incidental PID string, determines GPU count and power aggregation. Valid selected PID variants survive platform synchronization. Full-rack quantity labels use racks; modular labels use servers. Full racks start with one-rack SU when switching from the four-node CVD default. NVL8 full-rack systems receive dedicated physical racks and nine-server networking/OOB counts. Their inputs remain per server (24 kW base / 30 kW peak per server, 270 kW peak per nine-server rack at defaults). A rack of NVL8 servers is not an NVL72 system.
 
 All 55 Node tests pass, including disjoint PID menus, preserved selections, stale-PID resistance, rack/server GPU and power math, phase CCW incremental child quantities and generated XLSX ZIP/XML content using captured data only. Rendered browser and Excel verification remains outstanding.
+## Optional Cisco GB300 Cloud RA requirement
+
+The GB300 platform exposes **Engineering sizing / configurable topology** (the existing default) and **Cisco Cloud RA required**. The requirement follows RA backend building blocks and audits the complete design for deviations. It is not a claim of full RA or NCP compliance. The current configurable frontend, SE1 OOB spine blocks, and small management cluster can fail the requirement. Failures appear in the input note, summary, QA, SE scorecard, BOM statuses, captured phase state and purchasing exports. PowerPoint footers carry the RA audit status.
+
+Source: [Cisco N9000 Cloud RA with NVIDIA GB300 NVL72](https://www.cisco.com/c/en/us/products/collateral/data-center-networking/n9000-gb300-nvl72-cra.html), updated September 8, 2026, Tables 2, 3 and 4.
+
+**Reservation policy:** size for the larger of deployed racks and optional planned capacity. Through 64 racks, retain published two-tier quantity tiers (2, 4, 8, 16, 32 and 64). Above 64, round leaf/spine capacity to complete 16-rack SU-groups through 512 racks, then 32-rack SU-groups through 1024. Table 3 implies 64 leaves + 48 spines per 16-rack group across both planes, or 128 leaves + 72 spines per 32-rack group at the 1024-rack layout. Superspines conservatively reserve the next published core tier (128/256/512/1024 racks); this is an explicit planning allowance, not a claim of minimum required core inventory at intermediate scales. Planned capacity above 64 racks selects three tiers from the initial deployment. Above 1024 racks the calculation fails instead of extrapolating. Intermediate block-derived quantities are flagged REVIEW and are not labeled as exact published Table 3 rows.
+
+| Reserved racks | Leaves (both planes) | Spines (both planes) | Superspines (both planes) | Leaf-spine 800G links | Spine-superspine 800G links |
+|---:|---:|---:|---:|---:|---:|
+| 128 | 512 | 384 | 144 | 9,216 | 9,216 |
+| 256 | 1,024 | 768 | 288 | 18,432 | 18,432 |
+| 512 | 2,048 | 1,536 | 576 | 36,864 | 36,864 |
+| 1,024 | 4,096 | 2,304 | 1,152 | 73,728 | 73,728 |
+
+For these three-tier anchors, with `R` reserved racks:
+
+- Leaf-spine links = `leaves × 18` physical 800G links.
+- Spine-superspine links = `R × 72` physical 800G links, reconciled against Table 3's combined switch-to-switch transceiver totals.
+- Inter-switch transceivers = `2 × (leaf-spine links + spine-superspine links)`.
+- Inter-switch MPO-12 cables = `2 × (leaf-spine links + spine-superspine links)`; each 800G DR8 connection uses two MPO-12 cables.
+- Average spine port allocation is 24 down + 24 up at 128/256/512 racks and 32 down + 32 up at 1024 racks. Aggregate superspine allocation is 64 downlink cages per switch. These aggregate budgets do not establish the exact SU-group wiring or superspine group mapping. Three-tier `portMapVerified` remains false.
+- Host-side optics = `deployed racks × 72`; host cables = `deployed racks × 144`. Switch-side host optics reserve `R × 72` ports. Unused reserved host branches must not be counted as free physical cages.
+- Host assignment preserves two-rack SU locality: each rail leaf carries 36 logical 400G links for a full SU, 18 for an odd final rack, or zero for an unused reserved SU. It does not distribute hosts evenly across all future SU leaves.
+
+**104-rack reconciliation:** engineering mode produces 240 leaves + 128 spines = 368 switches. RA planning uses `ceil(104 / 16) = 7` SU-groups, for 112-rack leaf/spine capacity: `7 × 64 = 448` leaves and `7 × 48 = 336` spines. Retaining the published 128-rack superspine core tier contributes 144 superspines, for **928 backend switches**. The former 1040-switch result reserved all eight groups of the 128-rack anchor; that reservation now requires an explicit planned capacity of 128 racks. These modes have different topology and leaf utilization, so their switch totals are not equivalent implementations of the same RA.
+
+For that 104-rack/112-capacity plan: 7,488 active host optics, 8,064 reserved switch-side host optics, and 14,976 active host cables. Leaf-spine and spine-superspine connections each total 8,064 physical 800G links; together they require 32,256 transceivers and 32,256 MPO-12 cables. Aggregate spine allocation remains 24 down + 24 up; the reserved core averages 56 downlinks + 8 free cages per superspine. Exact group wiring remains unverified. Compute facilities stay based on 104 deployed racks; backend facilities follow the reserved switch inventory. The 928 count is an incremental planning derivation, not a published 104-rack BOM or proof of minimum required switches.
+
+Policy and planned capacity are saved with deal profiles. Older sizing snapshots that lack these controls migrate to engineering mode with planned capacity zero.
+
+## GB300 topology scalability limits
+
+An always-visible results panel separates installed backend inventory capacity, topology/model ceiling, and the Cisco Cloud RA two-tier boundary. These limits apply per interconnected fabric, not to the sum of independent SU fabrics. They are backend port/bandwidth planning limits; optics, cables, wiring, vendor qualification and other system domains require their own validation. Limits are captured in `backend.scalability`, emitted in QA, and included in the PowerPoint Scale Unit & Growth slide.
+
+For the engineered compact GB300 two-tier model on 64-cage 800G switches, each spine can reach 128 logical 400G leaf peers and each leaf can carry 64 host links with 1:1 uplink bandwidth. Four equal rails each need 18 links per compute rack. The complete-rack ceiling is `floor(floor(128 / 4) × 64 / 18) = 113 racks = 8,136 GPUs`. The actual solver fits 113 racks and rejects 114; the earlier conversational limit of 112 racks was too low. Compact engineering fabric capacity now preserves the actual odd rack count instead of reserving an unsupported even 114-rack capacity at 113 deployed racks.
+
+For 104 deployed racks, the current 120 leaves and 64 spines per plane can accommodate `floor(30 leaves/rail × 64 host links/leaf / 18 links/rack/rail) = 106 racks`. This is two spare rack slots with the current switch inventory, not nine. Reaching the 113-rack topology ceiling requires additional leaves and links and may require recabling. The Cisco Cloud RA two-tier boundary remains 64 racks / 4,608 GPUs and is shown separately; planned RA growth beyond that boundary requires three tiers from day one.
+
+At 104 racks in RA-required mode, installed leaf/spine inventory supports 112 racks (eight spare rack slots), with a separate 128-rack superspine core reservation. The implemented RA model covers up to 1024 racks; the panel states that growth requires additional SU-groups/core inventory and that the modeled SU-group arrangement changes above 512 racks. The engineering derived three-tier model remains bounded at 128 racks. Designs beyond a model limit show EXCEEDED and do not advertise verified installed headroom.

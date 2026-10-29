@@ -92,7 +92,7 @@ test('profile export/import merges atomically and restores all fields after relo
   const f=fixture();f.setRequirements({customer:'Demo','deal-id':'A'});const id=f.api.saveCurrentRequirements();
   f.api.exportRequirementsJSON();
   const payload=JSON.parse(await f.downloads[0].text());
-  assert.equal(payload.schemaVersion,3);assert.equal(f.downloads[1].download,'Cisco_Sizer_SE_Requirements.json');
+  assert.equal(payload.schemaVersion,4);assert.equal(f.downloads[1].download,'Cisco_Sizer_SE_Requirements.json');
   const other=fixture();other.setRequirements({customer:'Existing','deal-id':'B'});other.api.saveCurrentRequirements();
   assert.equal(await other.importFile(payload),true);
   assert.equal(Object.keys(JSON.parse(other.store.get(key))).length,2);
@@ -105,7 +105,7 @@ test('profile export/import merges atomically and restores all fields after relo
   assert.equal(await other.importFile(bad),false,'reject numeric strings that HTML number inputs would silently clear');
   assert.equal(other.store.get(key),before);
   assert.equal(await other.importFile('{invalid json'),false);assert.equal(other.store.get(key),before);
-  assert.equal(await other.importFile({schemaVersion:4,profiles:{}}),false);
+  assert.equal(await other.importFile({schemaVersion:5,profiles:{}}),false);
   assert.equal(await other.importFile({schemaVersion:1,profiles:[]}),false);
   assert.equal(await other.importFile({schemaVersion:1,profiles:{wrong:payload.profiles[id]}}),false);
 });
@@ -166,17 +166,20 @@ test('server model mismatch fails independently of sufficient compute node count
   assert.equal(f.api.runComplianceAudit().rows[0].status,'REVIEW');
 });
 
-test('rack-scale compute counts enclosed servers/trays, not rack units or GPUs',()=>{
+test('rack-scale targets audit compute racks while modular targets audit deployed servers',()=>{
   // Modular inputs round from three requested to four deployed nodes under
   // the default scale-unit policy; audit the deployed count.
   for(const [platform,count] of [['gb300-nvl72',54],['rubin-nvl72',54],['rubin-nvl8-rack',27],['rubin-hgx',4],['b300',4]]){
     const f=calculator();
     const d=f.run({platform,nodes:3}).design;
     assert.equal(d.compute.serverNodeCount,count,platform);
-    f.set({'req-target-nodes':count,'req-server-model':platform});
+    const rackScale=['gb300-nvl72','rubin-nvl72','rubin-nvl8-rack'].includes(platform);
+    const target=rackScale?3:count;
+    f.set({'req-target-nodes':target,'req-server-model':platform});
     f.api.calc();
     const matrix=f.controls.get('compliance-matrix-rows').innerHTML;
-    assert.match(matrix,new RegExp(count+' nodes'));
+    assert.match(matrix,new RegExp(target+(rackScale?' racks':' nodes')));
+    assert.equal(f.controls.get('req-target-count-label').textContent,rackScale?'Target Compute Rack Count':'Target Server Node Count');
     assert.match(matrix,/Model matches/);
   }
 });
@@ -295,4 +298,35 @@ test('spare requirements persist with full inputs and older profiles default to 
   assert.equal(f.controls.get('req-min-spare-pct').value,'');
   assert.equal(f.api.runComplianceAudit().rows.find(r=>r.key==='min-spare-pct').status,'NOT REQUESTED');
   f.setRequirements({'min-spare-pct':101});assert.equal(f.api.saveCurrentRequirements(),null);
+});
+
+test('104-rack GB300 requirement compares 104 compute racks and preserves target on model changes',()=>{
+  const f=fixture();f.run({platform:'gb300-nvl72',nodes:104});
+  f.setRequirements({'target-nodes':104,'server-model':'gb300-nvl72'});
+  let row=f.api.runComplianceAudit().rows[0];
+  assert.equal(row.actual,104);assert.equal(row.unit,'racks');assert.equal(row.margin,0);assert.equal(row.status,'PASS');
+  assert.doesNotMatch(f.controls.get('compliance-matrix-rows').innerHTML,/1,872 nodes/);
+  f.setRequirements({'target-nodes':105});assert.equal(f.api.runComplianceAudit().rows[0].status,'EXCEEDED');
+  f.setRequirements({'server-model':'b300'});
+  row=f.api.runComplianceAudit().rows[0];assert.equal(row.unit,'nodes');
+  assert.equal(f.controls.get('req-target-nodes').value,'105','changing model changes units, not the entered quantity');
+});
+
+test('rack-count profiles survive restore from modular sizing with Any model',async()=>{
+  const f=fixture();f.run({platform:'gb300-nvl72',nodes:5});
+  f.setRequirements({customer:'Rack Profile','server-model':'','target-nodes':5});
+  const id=f.api.saveCurrentRequirements();
+  assert.equal(JSON.parse(f.store.get(key))[id]['count-basis'],'racks');
+  f.run({platform:'b300',nodes:16});f.api.loadRequirementProfile(id);
+  assert.match(f.controls.get('req-profile-message').textContent,/Restored sizing inputs and recalculated/);
+  assert.equal(f.controls.get('req-target-nodes').value,'5');
+  assert.equal(f.api.runComplianceAudit().rows[0].actual,5);
+  // A v3 target used enclosed server/tray counts. Convert the stored minimum
+  // using its explicit model instead of interpreting 90 trays as 90 racks.
+  const legacy=JSON.parse(f.store.get(key))[id];delete legacy['count-basis'];
+  legacy['server-model']='gb300-nvl72';legacy['target-nodes']='90';
+  assert.equal(await f.importFile({schemaVersion:3,profiles:{[id]:legacy}}),true);
+  f.api.loadRequirementProfile(id);
+  assert.equal(f.controls.get('req-target-nodes').value,'5');
+  assert.equal(f.api.runComplianceAudit().rows[0].status,'PASS');
 });
