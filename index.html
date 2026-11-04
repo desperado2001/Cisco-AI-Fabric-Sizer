@@ -259,10 +259,18 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
         <option value="rail" selected>Rail-Optimized</option>
       </select></div>
       <div><label>Backend switch</label><select id="backendSwitch" onchange="calc()">
-        <option value="N9164E-NS4-O" selected>N9164E-NS4-O</option>
+        <option value="N9164E-NS4-O" selected>N9164E-NS4-O — air cooled · 64×800G</option>
         <option value="N9364E-SG2X-O">N9364E-SG2X-O</option>
+        <option value="N9364F-SG3-A">N9364F-SG3-A — G300 · 64×1.6T · air · Rubin planning</option>
       </select></div>
-      <div><label>800G backend optic</label><select id="backendOptic" onchange="calc()">
+      <div><label for="backendCoolingOption">Liquid-cooled N9164 requirement</label><select id="backendCoolingOption" onchange="calc()">
+        <option value="modeled" selected>Not required — use current modeled switch</option>
+        <option value="N9164F-NS6-ML">N9164F-NS6-ML — liquid-cooled MGX target · qualification pending</option>
+        <option value="N9364F-SG3-RL">N9364F-SG3-RL — G300 liquid-cooled ORv3 target · qualification pending</option>
+      </select></div>
+      <div id="backendCoolingNote" class="footer-note" style="grid-column:1/-1"></div>
+      <div id="g300PlanningNote" class="summary" style="display:none;grid-column:1/-1"></div>
+      <div><label id="backendOpticLabel">800G backend optic</label><select id="backendOptic" onchange="calc()">
         <option value="OSFP-800G-DR8" selected>OSFP-800G-DR8= — SMF · 500 m</option>
         <option value="OSFP-800G-VR8">OSFP-800G-VR8= — MMF · 50 m</option>
       </select></div>
@@ -536,6 +544,8 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
         <div><label for="req-spare-scope">Required Spares Coverage</label><select id="req-spare-scope" onchange="runComplianceAudit()"><option value="all">All physical BOM items</option><option value="hardware">Hardware only</option><option value="optics">Optics &amp; cables only</option><option value="">Any selected scope</option></select></div>
       </div>
       <p>Thresholds audit the current design without changing sizing inputs. The target follows the required model: rack-scale systems use complete compute racks; modular systems use individual server nodes. Any model follows the active sizing deployment. Max Total Racks separately limits the entire IT rack footprint. Model selection checks the platform family; the sized model/PID appears below. A blank threshold is not audited; zero storage means no storage requirement. Deal profiles save requirements and all sizing inputs, including feature toggles. Loading restores the saved configuration and recalculates. Imported matching Customer (DealID) profiles replace saved profiles.</p>
+      <label for="req-ncpra">NCP-RA requirements</label><select id="req-ncpra" onchange="calc()"><option value="off">Not requested</option><option value="guide">Review against NCRA guide</option></select>
+      <div id="ncpra-review"></div>
       <span id="compliance-overall-badge" class="tag" role="status" aria-live="polite">Awaiting calculation</span>
       <div class="phase-table"><table><thead><tr><th>Parameter</th><th>Customer Requirement</th><th>Sized Value</th><th>Margin / Delta</th><th>Audit Status</th></tr></thead><tbody id="compliance-matrix-rows"></tbody></table></div>
       <p id="req-audit-note">Power covers modeled IT and selected CDU electrical loads; facility utility overhead is not modeled. Rack count excludes external CDU floor space. REVIEW indicates incomplete inputs, unknown physical data, or a typical power basis. This scorecard does not replace the Validation tab.</p>
@@ -559,7 +569,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
   <b>AMD MI355X:</b> v69 models MI355X as an 8-GPU server on the shared server-sizing engine. The backend defaults to Cisco N9364E-SG2X-O Silicon One and 8×400G RoCE/server, while NIC count, active link speed and plane count are configurable; BOM, topology and validation follow those server-level assumptions. Spectrum-X is not required, and exact OEM NIC/optic/server physical data remains validation-required.<br>
   <b>GB300 OOB guardrail:</b> v67 enforces a dedicated spine-leaf OOB design whenever the deployment exceeds 2 NVL72 racks. Direct handoff and simple STP remain available only for 1–2 racks; if an SE selects either at >2 racks, the effective topology is automatically forced to spine-leaf and the UI/QA explains the override.<br>
   <b>GB300 OOB SE override:</b> v66 adds an explicit GB300 OOB design selector. The SE can choose Auto, direct customer-core handoff, simple N93108TC-FX3 Layer-2/STP aggregation, or an N9336C-SE1 spine-leaf OOB design. BOM, topology, facilities, KPI and validation follow the selected mode.<br>
-  <b>GB300 OOB simplification:</b> v65 removes mandatory N9336C-SE1 aggregation at 1–2 racks. Small deployments use the two in-rack N93108TC-FX3 switches per NVL72 and hand off directly to the customer OOB/management core. From 3 racks upward the app adds only a simple redundant N9336C-SE1 aggregation pair, not a separate spine-leaf OOB fabric.<br>
+  <b>GB300 OOB simplification:</b> v65 removes mandatory N9336C-SE1 aggregation at 1–2 racks. Small deployments use the two in-rack N93108TC-FX3-MGX switches per NVL72 and hand off directly to the customer OOB/management core. From 3 racks upward the app adds only a simple redundant N9336C-SE1 aggregation pair, not a separate spine-leaf OOB fabric.<br>
   <b>GB300 OOB correction:</b> v64 restores OOB as a physically separate fabric. Rack N93108TC-FX3 ToRs now uplink to dedicated N9336C-SE1 OOB aggregation switches; the in-band N9364E North-South fabric no longer carries or terminates OOB links. The BOM, facility rows, KPI and topology view are updated consistently.<br>
   <b>GB300 topology:</b> v63 replaces the generic Secure AI Factory topology with a dedicated GB300 NVL72 view: CX-8 dual-plane East-West, BF3 North-South into the converged N9364E tier, rack OOB ToRs into the same converged spine tier, VAST leaves/EBoxes, dedicated management leaves, Nexus Dashboard, and shared low-speed OOB are shown as separate paths.<br>
   <b>Visual topology:</b> v62 makes the 1–2 rack GB300 N9364E role explicit: the two switches are shown as the collapsed converged spine / aggregation tier, with no separate leaf layer at this starter scale.<br>
@@ -787,6 +797,8 @@ const PHYSICAL={
   switch:{
     "N9164E-NS4-O":{name:"Cisco N9164E-NS4-O",ru:2,powerMaxW:2209,powerTypicalW:1455,weightNetKg:27.46048208,weightGrossKg:null,source:"Cisco HW installation guide; installed chassis w/ fans + PSUs"},
     "N9364E-SG2X-O":{name:"Cisco N9364E-SG2X-O",ru:2,powerMaxW:3000,powerTypicalW:null,weightNetKg:20.34815372,weightGrossKg:null,source:"Secure AI Factory deck"},
+    "N9364F-SG3-A":{name:"Cisco N9364F-SG3-A G300",ru:3,powerMaxW:0,powerTypicalW:null,weightNetKg:0,weightGrossKg:null,g300:true,source:"Cisco Live BRKDCN-3939: G300 102.4T, 64×1.6T, air cooled 3RU. Electrical power and installed weight TBD; no G200 proxy values."},
+    "N9164F-NS6-ML":{name:"Cisco N9164F-NS6-ML Spectrum-6",ru:2,powerMaxW:0,powerTypicalW:null,weightNetKg:0,weightGrossKg:null,g300:true,source:"Cisco ORv3/MGX announcement and N9100 FAQ: Spectrum-6 102.4T, 64×1.6T OSFP, liquid cooled (NVIDIA MGX). 2RU is a rack-space planning placeholder; electrical power, installed weight and coolant data TBD; no NS4 proxy values."},
     "N9K-C9364D-GX2A":{name:"Cisco N9K-C9364D-GX2A",ru:2,powerMaxW:3124,powerTypicalW:670,weightNetKg:32.02362132,weightGrossKg:null,source:"Secure AI Factory deck"},
     "N9K-C9332D-GX2B":{name:"Cisco N9K-C9332D-GX2B",ru:1,powerMaxW:1442,powerTypicalW:630,weightNetKg:15.80315817,weightGrossKg:null,source:"Secure AI Factory deck"},
     "N9K-C93108TC-FX3":{name:"Cisco N9K-C93108TC-FX3",ru:1,powerMaxW:464,powerTypicalW:null,weightNetKg:9.0718474,weightGrossKg:null,source:"Secure AI Factory deck"},
@@ -1040,6 +1052,9 @@ function syncPlatform(){
   if($('supermicroPidWrap'))$('supermicroPidWrap').style.display=p==='supermicro-b300'?'':'none';
   if(p==='supermicro-b300')syncSupermicroPidOptions();
   const fullRack=['gb300-nvl72','rubin-nvl72','rubin-nvl8-rack'].includes(p);
+  if(!['rubin-nvl72','rubin-hgx','rubin-nvl8-rack'].includes(p)&&$('backendSwitch')?.value==='N9364F-SG3-A')$('backendSwitch').value='N9164E-NS4-O';
+  const g300Option=Array.from($('backendSwitch')?.options||[]).find(o=>o.value==='N9364F-SG3-A');
+  if(g300Option)g300Option.disabled=!['rubin-nvl72','rubin-hgx','rubin-nvl8-rack'].includes(p);
   if($('nodes').labels?.[0])$('nodes').labels[0].textContent=fullRack?'Complete racks':'Individual servers';
   if($('nodesUnit'))$('nodesUnit').textContent=fullRack?'racks':'servers';
   if($('deploymentModelNote'))$('deploymentModelNote').textContent=p==='rubin-nvl8-rack'
@@ -1182,6 +1197,40 @@ function syncSuUi(){
 }
 function toggleVast(){const t=$('vastMode').value==='target';$('eboxQty').disabled=t;$('targetPb').disabled=!t}
 function dist(total,count){const b=Math.floor(total/count),r=total%count;return Array.from({length:count},(_,i)=>b+(i<r?1:0))}
+function switchCoolingPlan(option,modeledPid){
+  if(modeledPid===NCRA_RUBIN_SWITCH&&option!=='N9364F-SG3-RL'){
+    const required=option==='N9164F-NS6-ML';
+    return {required,met:required,status:required?'REVIEW':'NOT REQUESTED',modeledPid,targetPid:required?modeledPid:null,familyPid:'N9164F-NS6',
+      referencePid:modeledPid,cooling:'Direct liquid cooling',rackArchitecture:'NVIDIA MGX',familyBandwidthTbps:102.4,familyPortSpeedG:1600,appliedToSizing:true,
+      orderabilityVerified:false,powerW:null,weightKg:null,coolantFlowLpm:null,source:HIGH_RADIX_SWITCHES[modeledPid].source,
+      message:`${modeledPid} (Spectrum-6, 102.4T, 64×1.6T, liquid cooled) is the modeled backend switch under the NCRA Vera Rubin profile. Quantities use the 102.4T whole-link model; exact CCW configuration, optics, MGX mounting/power, coolant conditions, power and installed weight require Cisco qualification.`};
+  }
+  if(option==='N9364F-SG3-RL')return {required:true,status:'FAIL',modeledPid,targetPid:option,familyPid:'N9364F-SG3',referencePid:option,
+    cooling:'Direct liquid cooling',rackArchitecture:'ORv3',familyBandwidthTbps:102.4,familyPortSpeedG:1600,appliedToSizing:false,
+    orderabilityVerified:false,powerW:null,weightKg:null,coolantFlowLpm:null,
+    source:'https://blogs.cisco.com/datacenter/powering-ai-ready-data-centers-with-n9000-support-for-orv3',
+    familySource:'https://www.ciscolive.com/c/dam/r/ciscolive/emea/docs/2026/pdf/BRKDCN-3939.pdf',
+    message:`Liquid-cooled target N9364F-SG3-RL is not applied to the calculated ${modeledPid} inventory. Confirm the exact ORv3 physical, electrical, coolant and optical configuration with Cisco before ordering. Current G300-A quantities, if selected, describe the air-cooled planning model.`};
+  const required=option==='N9164F-NS6-ML';
+  return {required,status:required?'FAIL':'NOT REQUESTED',modeledPid,
+    targetPid:required?'N9164F-NS6-ML':null,familyPid:'N9164F-NS6',
+    referencePid:'N9164F-NS6-ML',cooling:'Direct liquid cooling',rackArchitecture:'NVIDIA MGX',
+    familyBandwidthTbps:102.4,familyPortSpeedG:1600,appliedToSizing:false,
+    orderabilityVerified:false,powerW:null,weightKg:null,coolantFlowLpm:null,
+    source:'https://blogs.cisco.com/datacenter/powering-ai-ready-data-centers-with-n9000-support-for-orv3',
+    familySource:'https://www.cisco.com/c/en/us/products/collateral/switches/nexus-9000-series-switches/n9164e-ns4-o-switch-faq.html',
+    airSource:'https://www.cisco.com/c/en/us/td/docs/switches/datacenter/nexus9000/hw/n9164E-NS4-O/cisco-n9164e-ns4-o-hardware-installation-guide/install-chassis/determine-chassis-direction-for-airflow.html',
+    message:required?`Liquid-cooled target N9164F-NS6-ML is not applied to the calculated ${modeledPid} inventory. It is a different Spectrum-6 / 102.4T family, not a cooling kit for N9164E-NS4-O. Liquid-cooling requirement is unmet until a qualified port, optic, power, rack and cooling profile is available. Confirm exact CCW configuration, availability, MGX mounting/power, hoses, manifolds, coolant conditions and heat capture with Cisco.`
+      :'Liquid-cooled reference: N9164F-NS6-ML (NVIDIA MGX); family designation N9164F-NS6. N9164E-NS4-O is the air-cooled Spectrum-4 model. The liquid model requires a separate qualified sizing and cooling profile.'};
+}
+function switchCoolingReferenceHtml(plan){
+  if(plan.appliedToSizing&&plan.modeledPid===NCRA_RUBIN_SWITCH)return `<b class="warn">NCRA Vera Rubin backend: ${plan.modeledPid} placed${plan.met?' — liquid-cooled requirement applied, qualification pending':''}</b><br>${plan.message}<br><a href="${plan.source}" target="_blank" rel="noopener">Cisco liquid-cooled MGX model</a>`;
+  if(plan.targetPid==='N9364F-SG3-RL')return `<b class="bad">G300 LIQUID-COOLED REQUIREMENT UNMET</b><br>${plan.message}<br><a href="${plan.source}" target="_blank" rel="noopener">Cisco N9364F-SG3-RL liquid ORv3 reference</a>`;
+  if(!plan.required&&plan.modeledPid==='N9364F-SG3-A')return '<b>G300 air-cooled planning:</b> N9364F-SG3-A, 3RU. For a liquid-cooled ORv3 requirement select N9364F-SG3-RL above; its exact physical and coolant configuration still requires qualification. Power and installed weight are TBD.';
+  return `<b class="${plan.required?'bad':'warn'}">${plan.required?'LIQUID-COOLED BACKEND REQUIREMENT UNMET':'N9164 liquid-cooled part-number reference'}</b><br>${plan.message}<br>
+    <b>Specific MGX liquid-cooled model:</b> N9164F-NS6-ML · <b>Family:</b> N9164F-NS6 (102.4T / 1.6T-port family). These are a specific model and its family name, not two switches or add-on kits. Power, installed weight, liquid/air heat split, flow and accessories remain TBD; no NS4 power values or server CDU allowance are assigned to the liquid model.<br>
+    <a href="${plan.source}" target="_blank" rel="noopener">Cisco liquid-cooled MGX model</a> · <a href="${plan.familySource}" target="_blank" rel="noopener">N9100 family specifications</a> · <a href="${plan.airSource}" target="_blank" rel="noopener">NS4 air-cooling documentation</a>`;
+}
 function vastCapacity(qty,key){
   const m=EBOX[key],n=Math.max(1,Math.floor(qty)),rebuild=n<=11?2:4,dataStrips=Math.min(146,Math.max(0,2*n-rebuild-4));
   const ec=dataStrips?4/(4+dataStrips):1, factor=(1-ec)*.92*.99*.9977;
@@ -1229,6 +1278,141 @@ function twoTierPortPlan(linksPerPlane,speed=400,rails=4,switchCapacityGbps=5120
 }
 function fourRailDistribution(links,leaves){
   return Array.from({length:4},()=>dist(links/4,leaves/4)).flat();
+}
+// 102.4T / 64×1.6T switches sharing one whole-link planning geometry. NS6-ML is
+// placed for Vera Rubin when the NCRA requirements option is selected.
+const HIGH_RADIX_SWITCHES={
+  'N9364F-SG3-A':{short:'G300',asic:'Cisco Silicon One G300',form:'3RU air cooled',opticPid:'TBD-1600G-G300-SWITCH',cablingPid:'TBD-G300-CABLING',
+    source:'https://www.ciscolive.com/c/dam/r/ciscolive/emea/docs/2026/pdf/BRKDCN-3939.pdf'},
+  'N9164F-NS6-ML':{short:'Spectrum-6',asic:'NVIDIA Spectrum-6',form:'NVIDIA MGX liquid cooled',opticPid:'TBD-1600G-NS6-SWITCH',cablingPid:'TBD-NS6-CABLING',
+    source:'https://blogs.cisco.com/datacenter/powering-ai-ready-data-centers-with-n9000-support-for-orv3'}
+};
+const NCRA_RUBIN_SWITCH='N9164F-NS6-ML';
+function rubinG300BackendDesign(seed,switchPid='N9364F-SG3-A'){
+  const hs=HIGH_RADIX_SWITCHES[switchPid];
+  const cageSpeedG=1600,switchCapacityGbps=102400,rails=seed.railCount||8;
+  const perCage=cageSpeedG/seed.speed,radix=64*perCage,hostLimit=Math.floor(radix/2);
+  const plan=twoTierPortPlan(seed.linksPerPlane,seed.speed,rails,switchCapacityGbps,64);
+  const leaves=plan?.leaves||rails*Math.ceil(seed.linksPerPlane/(rails*hostLimit));
+  const host=Array.from({length:rails},()=>dist(seed.linksPerPlane/rails,leaves/rails)).flat();
+  const up=plan?Array(leaves).fill(plan.uplinks/perCage):host.map(n=>Math.ceil(n/perCage));
+  const spines=plan?.spines||Math.max(2,Math.ceil(up.reduce((a,b)=>a+b,0)/64));
+  const totalLeaves=leaves*seed.planes,totalSpines=spines*seed.planes;
+  const physicalLeafSpineLinks=up.reduce((a,b)=>a+b,0)*seed.planes;
+  const hostCageDist=host.map(n=>Math.ceil(n/perCage));
+  return {...seed,g300Planning:true,cageSpeedG,switchCapacityGbps,ciscoCx8DualRA:false,gb300Nvl72Ra:false,gb300DerivedThreeTier:false,
+    leavesPerPlane:leaves,spinesPerPlane:spines,totalLeaves,totalSpines,totalSuperspines:0,superspinesPerPlane:0,
+    hostLinkDist:host,hostCageDist,uplinkDist:up,switchHostOptics:hostCageDist.reduce((a,b)=>a+b,0)*seed.planes,
+    physicalLeafSpineLinks,leafSpineOptics:physicalLeafSpineLinks*2,
+    logicalLeafSpineLinks:physicalLeafSpineLinks*perCage,logicalLeafSpineLinksPerPlane:physicalLeafSpineLinks*perCage/seed.planes,
+    physicalSpineSuperLinks:0,spineSuperOptics:0,logicalSpineSuperLinks:0,logicalSpineSuperLinksPerPlane:0,
+    hostLeafCables:0,leafSpineCables:0,spineSuperCables:0,
+    portMapVerified:!!plan,meshLinksPerPair:plan?.pairLinks||0,meshLinkSpeedG:seed.speed,
+    linksPerLeafSpinePair400:seed.speed===400?plan?.pairLinks||0:null,
+    exceedsTwoTier:!plan,atTwoTierBoundary:!!plan&&leaves===radix,fabricTier:plan?'2-tier':'3-tier review',
+    railCount:rails,leavesPerRailPerPlane:leaves/rails,
+    railMappingVerified:Number.isInteger(leaves/rails)&&host.every((n,i,a)=>n===a[i%(leaves/rails)]),
+    railBasis:hs.short+' 102.4T planning; 64×1.6T cages with 2×800G or 4×400G breakout. Exact Rubin NIC, rails, plane mapping and optics require qualification.',
+    backendLabel:seed.backendLabel+' · '+hs.short+' 102.4T / 1.6T-cage engineering planning',highRadixPid:switchPid,
+    qualificationStatus:'REVIEW',physicalDataKnown:false,twoTierGpuCeiling:Math.floor(radix*hostLimit/(seed.linksPerPlane/seed.gpus)),
+    source:hs.source};
+}
+// NCRA Vera Rubin NVL72 compute fabric: eight planes, one 200G lane per GPU per plane
+// (1.6T/GPU), four rails and 14-rack SUs on 512 × 200G (64 × 1.6T) Spectrum-6 switches.
+// Each plane has one leaf per rail per SU. Leaves are 1:1 and spines are provisioned
+// for the next power-of-two SU band, so growth inside a band only adds leaves.
+const NCRA_RUBIN_SU_RACKS=14,NCRA_RUBIN_MAX_SU=128;
+function ncraRubinOctalPlaneDesign(racks,switchPid=NCRA_RUBIN_SWITCH){
+  const hs=HIGH_RADIX_SWITCHES[switchPid];
+  const trays=18,rails=4,planes=8,lane=200,radixLanes=512,cageLanes=8,capacity=64;
+  const n=Math.max(1,Math.ceil(+racks||1)),su=Math.ceil(n/NCRA_RUBIN_SU_RACKS),gpus=n*72;
+  const fullLanes=NCRA_RUBIN_SU_RACKS*trays,leavesPerPlane=rails*su;
+  const suLanes=Array.from({length:su},(_,i)=>Math.min(NCRA_RUBIN_SU_RACKS,n-i*NCRA_RUBIN_SU_RACKS)*trays);
+  const host=Array.from({length:rails},()=>suLanes).flat();
+  const band=2**Math.ceil(Math.log2(su)),bandLeaves=rails*band;
+  const spinesPerPlane=Math.ceil(fullLanes*bandLeaves/radixLanes);
+  // Prefer an even half-radix split per spine; otherwise spread the 1:1 lanes.
+  const half=radixLanes/2,pairLanes=half%spinesPerPlane===0&&half/spinesPerPlane*bandLeaves<=radixLanes?half/spinesPerPlane:Math.ceil(fullLanes/spinesPerPlane);
+  const uplinkLanes=pairLanes*spinesPerPlane,hostCageDist=host.map(l=>Math.ceil(l/cageLanes)),upCages=Math.ceil(uplinkLanes/cageLanes);
+  const spineDownLanes=pairLanes*leavesPerPlane,spineDownCages=Math.ceil(spineDownLanes/cageLanes);
+  const fits=su<=NCRA_RUBIN_MAX_SU&&uplinkLanes>=fullLanes&&pairLanes*bandLeaves<=radixLanes&&hostCageDist.every(c=>c+upCages<=capacity);
+  const physicalLeafSpineLinks=upCages*leavesPerPlane*planes,logicalLeafSpineLinksPerPlane=uplinkLanes*leavesPerPlane;
+  return {gpus,gpusPerNode:72,planes,speed:lane,logicalPerGpu:planes,aggregatePerGpu:planes*lane,
+    physicalHostLinks:gpus*planes,linksPerPlane:gpus,hostOptics:n*trays*4,hostMpoConnectors:n*trays*8,
+    leavesPerPlane,spinesPerPlane,superspinesPerPlane:0,totalLeaves:leavesPerPlane*planes,totalSpines:spinesPerPlane*planes,totalSuperspines:0,
+    hostLinkDist:host,hostCageDist,uplinkDist:Array(leavesPerPlane).fill(upCages),switchHostOptics:hostCageDist.reduce((a,b)=>a+b,0)*planes,
+    physicalLeafSpineLinks,leafSpineOptics:physicalLeafSpineLinks*2,logicalLeafSpineLinksPerPlane,logicalLeafSpineLinks:logicalLeafSpineLinksPerPlane*planes,
+    logicalSpineSuperLinksPerPlane:0,logicalSpineSuperLinks:0,physicalSpineSuperLinks:0,spineSuperOptics:0,
+    hostLeafCables:n*trays*8,leafSpineCables:Math.ceil(logicalLeafSpineLinksPerPlane*planes/4),spineSuperCables:0,
+    raScaleUnits:0,ssCoresPerPlane:0,ssPerCore:0,linksPerLeafSpinePair400:null,linksPerSpineSuperPair400:0,
+    ciscoCx8DualRA:false,gb300Nvl72Ra:false,gb300DerivedThreeTier:false,validatedScaleExceeded:!fits,
+    portMapVerified:fits,meshLinkSpeedG:lane,meshLinksPerPair:pairLanes,spineDownCages,spineCagesUsed:spineDownCages,
+    isCustom:true,nicProfile:'cx9-rubin-nvl72-octal',portMode:'octal',profileBasis:'gpu',hostInterfaceSpeed:1600,physicalPortsPerGpu:1,
+    exceedsTwoTier:!fits,atTwoTierBoundary:fits&&su===NCRA_RUBIN_MAX_SU,fabricTier:fits?'2-tier':'3-tier review',
+    octalPlane:true,scalableUnits:su,suRacks:NCRA_RUBIN_SU_RACKS,spineBandSu:band,maxScalableUnits:NCRA_RUBIN_MAX_SU,
+    leafSpineShuffle:su>32,trayLeafShuffle:true,
+    g300Planning:true,highRadixPid:switchPid,cageSpeedG:1600,switchCapacityGbps:102400,
+    railCount:rails,gpusPerRailPerRack:18,leavesPerRailPerPlane:su,railGpuCounts:Array(rails).fill(gpus/rails),
+    railMappingVerified:host.every((l,i,a)=>l===a[i%su]),
+    railBasis:`NCRA octal-plane: 8 planes × 200G lanes/GPU, 4 rails, ${NCRA_RUBIN_SU_RACKS}-rack SUs; one leaf per rail per plane per SU on ${hs.short} 512 × 200G`,
+    backendLabel:`1600G / GPU · 8 × 200G octal-plane · ${hs.short} 102.4T / 1.6T-cage NCRA planning`,
+    qualificationStatus:'REVIEW',physicalDataKnown:false,twoTierGpuCeiling:NCRA_RUBIN_MAX_SU*NCRA_RUBIN_SU_RACKS*72,source:hs.source};
+}
+// NCRA GB300 NVL72 / HGX B300 compute fabric: four planes, one 200G lane per GPU per
+// plane (800G/GPU) on 51.2T switches in 256 × 200G mode. Each plane has one leaf per
+// rail group per SU (GB300: 7-rack SU, 4 rails; B300: 64-node SU, 8 rails in 4 groups).
+// Two-tier through 64 SUs; above that, 8-SU rail groups add a superspine tier.
+const NCRA_QUAD_PLANE={
+  'gb300-nvl72':{suUnits:7,gpusPerUnit:72,rails:4,laneOptions:[126,128],unit:'rack'},
+  'b300':{suUnits:64,gpusPerUnit:8,rails:8,laneOptions:[128],unit:'node'}
+};
+NCRA_QUAD_PLANE['supermicro-b300']=NCRA_QUAD_PLANE['b300'];
+const NCRA_QUAD_TWO_TIER_SU=64,NCRA_QUAD_MAX_SU=256,NCRA_QUAD_GROUP_SU=8;
+// Smallest spine count whose per-leaf lane split is whole 400G ports (or a single lane)
+// and fits the spine radix.
+function ncraQuadSpinePlan(leavesPerPlane,laneOptions,radixLanes=256){
+  for(let ns=1;ns<=radixLanes;ns++)for(const lanes of laneOptions){
+    if(lanes%ns)continue;
+    const pair=lanes/ns;
+    if((pair%2===0||pair===1)&&pair*leavesPerPlane<=radixLanes)return {spines:ns,uplinkLanes:lanes,pair};
+  }
+  return null;
+}
+function ncraQuadPlaneDesign(platform,units){
+  const q=NCRA_QUAD_PLANE[platform],planes=4,lane=200,railGroups=4,cageLanes=4,capacity=64;
+  const n=Math.max(1,Math.ceil(+units||1)),su=Math.ceil(n/q.suUnits),gpus=n*q.gpusPerUnit;
+  const suLanes=Array.from({length:su},(_,i)=>Math.min(q.suUnits,n-i*q.suUnits)*q.gpusPerUnit/railGroups);
+  const host=Array.from({length:railGroups},()=>suLanes).flat(),leavesPerPlane=railGroups*su;
+  const twoTier=su<=NCRA_QUAD_TWO_TIER_SU,groups=Math.ceil(su/NCRA_QUAD_GROUP_SU);
+  const plan=twoTier?ncraQuadSpinePlan(leavesPerPlane,q.laneOptions):null;
+  // Three-tier: each 8-SU rail group has 8 spines; each leaf sends 16 lanes to each.
+  const pair=twoTier?plan?.pair:16,uplinkLanes=twoTier?plan?.uplinkLanes:128;
+  const spinesPerPlane=twoTier?plan?.spines:railGroups*NCRA_QUAD_GROUP_SU*groups,superspinesPerPlane=twoTier?0:16*groups;
+  const hostCageDist=host.map(l=>Math.ceil(l/cageLanes)),upCages=Math.ceil((uplinkLanes||0)/cageLanes);
+  const fits=su<=NCRA_QUAD_MAX_SU&&(!twoTier||!!plan)&&hostCageDist.every(c=>c+upCages<=capacity);
+  const physicalLeafSpineLinks=upCages*leavesPerPlane*planes,logicalLeafSpineLinksPerPlane=(uplinkLanes||0)*leavesPerPlane;
+  const physicalSpineSuperLinks=twoTier?0:spinesPerPlane*32*planes;
+  const fabricUnits=(twoTier?su:groups*NCRA_QUAD_GROUP_SU)*q.suUnits;
+  return {gpus,gpusPerNode:q.gpusPerUnit,planes,speed:lane,logicalPerGpu:planes,aggregatePerGpu:planes*lane,
+    physicalHostLinks:gpus*planes,linksPerPlane:gpus,hostOptics:gpus,hostInterfaceSpeed:800,physicalPortsPerGpu:1,
+    leavesPerPlane,spinesPerPlane:spinesPerPlane||0,superspinesPerPlane,totalLeaves:leavesPerPlane*planes,totalSpines:(spinesPerPlane||0)*planes,totalSuperspines:superspinesPerPlane*planes,
+    hostLinkDist:host,hostCageDist,uplinkDist:Array(leavesPerPlane).fill(upCages),switchHostOptics:hostCageDist.reduce((a,b)=>a+b,0)*planes,
+    physicalLeafSpineLinks,leafSpineOptics:physicalLeafSpineLinks*2,logicalLeafSpineLinksPerPlane,logicalLeafSpineLinks:logicalLeafSpineLinksPerPlane*planes,
+    physicalSpineSuperLinks,spineSuperOptics:physicalSpineSuperLinks*2,logicalSpineSuperLinksPerPlane:twoTier?0:spinesPerPlane*128,logicalSpineSuperLinks:twoTier?0:spinesPerPlane*128*planes,
+    hostLeafCables:gpus*2,leafSpineCables:physicalLeafSpineLinks*2,spineSuperCables:physicalSpineSuperLinks*2,
+    raScaleUnits:su,ssCoresPerPlane:twoTier?0:NCRA_QUAD_GROUP_SU,ssPerCore:twoTier?0:2*groups,linksPerLeafSpinePair400:pair?pair/2:null,linksPerSpineSuperPair400:twoTier?0:1,
+    ciscoCx8DualRA:false,gb300Nvl72Ra:false,gb300CloudRa:false,gb300CompactTwoTier:false,gb300DerivedThreeTier:false,validatedScaleExceeded:!fits,
+    portMapVerified:fits,meshLinkSpeedG:lane,meshLinksPerPair:pair||0,spineDownCages:twoTier?Math.ceil((pair||0)*leavesPerPlane/cageLanes):32,spineUpCages:twoTier?0:32,
+    isCustom:false,nicProfile:null,portMode:'quad',profileBasis:'gpu',
+    exceedsTwoTier:!twoTier,atTwoTierBoundary:twoTier&&su===NCRA_QUAD_TWO_TIER_SU,fabricTier:!fits?'3-tier review':twoTier?'2-tier':'3-tier',
+    ncraQuadPlane:true,scalableUnits:su,suUnits:q.suUnits,suUnitLabel:q.unit,suGroups:twoTier?0:groups,maxScalableUnits:NCRA_QUAD_MAX_SU,
+    leafSpineShuffle:twoTier&&!!pair&&pair<=2,trayLeafShuffle:true,cageSpeedG:800,switchCapacityGbps:51200,
+    fabricRacks:platform==='gb300-nvl72'?fabricUnits:null,fabricGpus:fabricUnits*q.gpusPerUnit,
+    railCount:q.rails,gpusPerRailPerRack:platform==='gb300-nvl72'?18:null,leavesPerRailPerPlane:su,railGpuCounts:Array(q.rails).fill(gpus/q.rails),
+    railMappingVerified:host.every((l,i,a)=>l===a[i%su]),
+    railBasis:`NCRA quad-plane: 4 planes × 200G lanes/GPU, ${q.rails} rails${q.rails>railGroups?' in 4 rail groups':''}, ${q.suUnits}-${q.unit} SUs; one leaf per rail group per plane per SU on 256 × 200G`,
+    backendLabel:`800G / GPU · 4 × 200G quad-plane · 51.2T NCRA planning`,
+    twoTierGpuCeiling:NCRA_QUAD_TWO_TIER_SU*q.suUnits*q.gpusPerUnit};
 }
 function nvl72BackendDesign(platform,racks,raPolicy='engineering',plannedRacks=0){
   // NVIDIA preliminary DGX VR NVL72: 144 single-port 800G CX9 NICs / 72 GPUs.
@@ -1296,6 +1480,20 @@ function gb300CloudRaBackendDesign(activeRacks,plannedRacks=0){
 function gb300Scalability(be){
   const fabrics=be.totalLeaves/(be.leavesPerPlane*be.planes);
   const deployedPerFabric=be.gpus/72/fabrics;
+  if(be.ncraQuadPlane){
+    const twoTier=be.fabricTier==='2-tier',suRacks=be.suUnits;
+    const limit=(twoTier?NCRA_QUAD_TWO_TIER_SU:NCRA_QUAD_MAX_SU)*suRacks,exceeded=!be.portMapVerified||deployedPerFabric>limit;
+    return {platform:'gb300-nvl72',fabricTier:be.fabricTier,independentFabrics:fabrics,deployedRacksPerFabric:deployedPerFabric,
+      installedCapacityRacksPerFabric:exceeded?null:be.fabricRacks,installedHeadroomRacksPerFabric:exceeded?null:Math.max(0,be.fabricRacks-deployedPerFabric),
+      topologyLimitRacksPerFabric:limit,topologyLimitGpusPerFabric:limit*72,
+      engineeredTwoTierLimitRacks:NCRA_QUAD_TWO_TIER_SU*suRacks,ciscoRaTwoTierLimitRacks:64,reservedCoreCapacityRacks:null,
+      status:exceeded?'EXCEEDED':deployedPerFabric===limit?'AT LIMIT':'REVIEW',
+      growth:twoTier
+        ? `NCRA quad-plane stays two-tier through ${NCRA_QUAD_TWO_TIER_SU*suRacks} racks. Each new ${suRacks}-rack SU adds leaves; spine count steps up at fixed SU scales, so growth can still require spines, optics and recabling.`
+        : `Three-tier NCRA quad-plane grows in ${NCRA_QUAD_GROUP_SU*suRacks}-rack rail SU groups, each adding leaves, spines and superspines, up to ${NCRA_QUAD_MAX_SU*suRacks} racks.`,
+      qualification:'Backend port/bandwidth planning only. Growth capacity is not a verified cabling plan or a guarantee of vendor support, workload performance, power, cooling, frontend, storage or OOB capacity.',
+      source:'https://www.cisco.com/c/en/us/products/collateral/data-center-networking/n9000-gb300-nvl72-cra.html'};
+  }
   // 128 logical 400G leaf peers/spine; 64 host links/leaf at 1:1.
   // Four equal rails must each fit 18 links/rack, so round to whole racks.
   const engineeredTwoTierLimit=Math.floor(Math.floor(128/4)*64/18);
@@ -1502,6 +1700,7 @@ function gb300StorageNetwork(qty,activeRacks){
 function gb300OobDesign(activeRacks,storageServers=0,managementServers=0,ndNodes=0,networkSwitches=0,overrideMode='auto'){
   const racks=Math.max(1,Math.ceil(activeRacks));
   const inRackMgmtSwitches=racks*2;
+  const inRackMgmtPid='N93108TC-FX3-MGX';
   const rackTor100gLinks=racks*4;
 
   const storageServerEndpoints=Math.max(0,storageServers)*2;
@@ -1577,7 +1776,7 @@ function gb300OobDesign(activeRacks,storageServers=0,managementServers=0,ndNodes
 
   return {
     overrideMode:requestedMode,selectedMode,guardrailForced,
-    inRackMgmtSwitches,rackTor100gLinks,
+    inRackMgmtPid,inRackMgmtSwitches,rackTor100gLinks,
     rackUplinkSpeedG,rackSideOpticPid,aggregationOpticPid,
     aggregationSwitches,aggregationPid,aggregationLabel,aggregationLinks,peerLinks,
     rackTorOptics,rackTorCables,
@@ -2034,6 +2233,8 @@ function backendPortConsumption(be){
   let down=null,up=null;
   if(be.gb300CloudRa && be.aggregatePortBudgetVerified){
     down=be.spineDownCages;up=be.spineUpCages;
+  }else if((be.octalPlane||be.ncraQuadPlane) && be.portMapVerified){
+    down=be.spineDownCages;up=be.spineUpCages||0; // 200G lanes share cages across spine peers.
   }else if(be.portMapVerified && be.gb300DerivedThreeTier){
     down=24;up=24; // Four pod leaves x six 800G links; 24 uplinks.
   }else if(be.portMapVerified && !be.totalSuperspines){
@@ -2050,14 +2251,14 @@ function backendPortConsumption(be){
     superspines={role:'Superspine',switchesPerPlane:be.superspinesPerPlane,hostLinks:0,hostCages:0,
       downCages:occupied,upCages:0,usedCages:occupied,freeCages:known?capacity-occupied:null,capacity};
   }
-  return {capacity,cageSpeedG:800,hostLinkSpeedG:be.speed,planes:be.planes,
+  return {capacity,cageSpeedG:be.cageSpeedG||800,hostLinkSpeedG:be.speed,planes:be.planes,
     independentFabrics:be.totalLeaves/(be.leavesPerPlane*be.planes),
     verified:be.portMapVerified===true,quantityAnchorVerified:be.gb300CloudRa&&be.quantityAnchorVerified===true,aggregatePortBudgetVerified:be.aggregatePortBudgetVerified===true,leaves:[...groups.values()],spines,superspines};
 }
 function backendPortConsumptionHtml(be){
   const p=backendPortConsumption(be),v=n=>n===null?'Unverified':n;
   const rows=[...p.leaves,p.spines,...(p.superspines?[p.superspines]:[])].map(r=>`<tr><td>${r.role}</td><td>${r.switchesPerPlane}</td><td>${r.role==='Leaf'?r.hostLinks+' x '+p.hostLinkSpeedG+'G':'—'}</td><td>${r.hostCages}</td><td>${v(r.role==='Spine'?r.downCages:0)}</td><td>${v(r.role==='Leaf'?r.upCages:r.role==='Superspine'?r.downCages:0)}</td><td>${v(r.role==='Spine'?r.upCages:0)}</td><td>${v(r.usedCages)} / ${r.capacity}</td><td>${v(r.freeCages)}</td></tr>`).join('');
-  return `<h3>Backend leaf, spine and superspine port consumption</h3><p>Counts are per switch. Each modeled switch has 64 physical 800G ports. Switch quantities are per plane, per independent fabric; ${p.planes} plane(s), ${p.independentFabrics} independent fabric(s). Leaves with identical consumption are grouped.</p>
+  return `<h3>Backend leaf, spine and superspine port consumption</h3><p>Counts are per switch. Each modeled switch has 64 physical ${p.cageSpeedG}G ports. Switch quantities are per plane, per independent fabric; ${p.planes} plane(s), ${p.independentFabrics} independent fabric(s). Leaves with identical consumption are grouped. ${be.g300Planning?'G300 breakout and whole-link arithmetic are planning assumptions; exact optics and Rubin qualification remain unverified.':''}</p>
     <div style="overflow:auto"><table><thead><tr><th>Role</th><th>Switches / plane / fabric</th><th>Host links / switch</th><th>Host physical ports</th><th>To leaves</th><th>To spines</th><th>To superspines</th><th>Used physical ports</th><th>Free physical ports</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p>${p.verified?'Modeled port mapping verified.':p.aggregatePortBudgetVerified?'REVIEW: consumption shows aggregate RA planning port budgets; exact group and port wiring remains unverified.':'REVIEW: leaf allocations are estimates; spine and superspine consumption and availability are unverified.'} Free physical ports exclude unused branches of occupied breakout optics. Availability does not guarantee bandwidth, redundancy or supported expansion; rerun sizing after any change. Counts cover the backend fabric only.</p>`;
 }
@@ -2068,11 +2269,12 @@ function auditFabricLayout({be,fe,vn,gbMgmt,gbOob,isGb=false,frontendOver=2,dedi
   if(be)add('Backend',be.portMapVerified?'PASS':'REVIEW',be.portMapVerified?'Modeled whole-link mapping fits.':'No complete port map verified; capacity estimate only.');
   // Compare logical links, since breakout branches can reach separate peers.
   for(const [domain,fabric,peers,speed] of [
-    ['Backend',be,be?.gb300DerivedThreeTier?3:be?.spinesPerPlane,be?.speed],
+    ['Backend',be,be?.gb300DerivedThreeTier?3:be?.ncraQuadPlane&&be?.totalSuperspines?NCRA_QUAD_GROUP_SU:be?.spinesPerPlane,be?.speed],
     ['Frontend',fe,fe?.spines,400]
   ]){
     if(!fabric || !peers || fabric.collapsed || (fabric.gb300CloudRa&&fabric.totalSuperspines))continue;
-    const totals=(fabric.uplinkDist||[]).map(c=>c*800/speed);
+    // Octal-plane leaves share 200G lanes across spine peers within 1.6T cages.
+    const totals=fabric.octalPlane||fabric.ncraQuadPlane?fabric.uplinkDist.map(()=>fabric.meshLinksPerPair*peers):(fabric.uplinkDist||[]).map(c=>c*800/speed);
     const uneven=[...new Set(totals.filter(t=>t%peers!==0))];
     if(uneven.length){
       const candidates=Array.from({length:128},(_,i)=>i+1).filter(n=>n>=2&&totals.every(t=>t%n===0));
@@ -2170,7 +2372,7 @@ function gb300TopologyVisual(ctx){
 
     <g transform="translate(0 ${tierOffset})">
     ${box(410,285,380,120,rackLabel,
-      `72 GPUs/rack · 72 × CX-8 · 18 × BF3 B3240 · ${gb300Oob?.inRackMgmtSwitches||nodes*2} × N93108TC-FX3 rack OOB ToRs`,
+      `72 GPUs/rack · 72 × CX-8 · 18 × BF3 B3240 · ${gb300Oob?.inRackMgmtSwitches||nodes*2} × N93108TC-FX3-MGX rack OOB ToRs`,
       '#38bdf8','#0b2433',13)}
     <text x="600" y="338" text-anchor="middle" fill="#86efac" font-size="9">CX-8: 2 × 400G/GPU, one link per East-West plane</text>
     <text x="600" y="356" text-anchor="middle" fill="#86efac" font-size="9">BF3: ${nodes*36} × 400G North-South ports</text>
@@ -2201,7 +2403,7 @@ function gb300TopologyVisual(ctx){
          <path d="M 790 405 C 850 430, 900 448, 940 470" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-dasharray="6,4" marker-end="url(#gArrGrey)"/>
          <text x="850" y="438" text-anchor="middle" fill="#aab8c7" font-size="8">${gb300Oob?.rackTor100gLinks||nodes*4} × 100G rack-management uplinks</text>
          ${line(940,534,940,565,'#94a3b8',2,'6,4')}`
-      : `${box(760,485,360,72,'Shared OOB Disabled','Rack-local N93108TC-FX3 ToRs remain installed in each GB300 rack','#475569','#111827',10)}`}
+      : `${box(760,485,360,72,'Shared OOB Disabled','Rack-local N93108TC-FX3-MGX ToRs remain installed in each GB300 rack','#475569','#111827',10)}`}
 
     <text x="250" y="610" text-anchor="middle" fill="#f59e0b" font-size="11" font-weight="700">VAST DATA PATH</text>
     ${vastEnabled
@@ -2277,7 +2479,7 @@ function topologyVisual(ctx){
     </defs>
 
     <text x="600" y="28" text-anchor="middle" fill="#e2e8f0" font-size="16" font-weight="800">Cisco Secure AI Factory — Logical Topology</text>
-    <text x="600" y="48" text-anchor="middle" fill="#64748b" font-size="10">${nodes} deployed compute units / ${be.gpus} GPUs · ${suMode==='off'?'SU off':suPlan.suCount+' × '+suPlan.suNodes+'-node SU'} · ${top==='rail'?'Rail-Optimized':'Classic'} · ${planeLabel}${be.isCustom?` · ${be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':be.nicProfile==='cx9-rubin-nvl72'?'ConnectX-9 / Rubin NVL72':'Custom NIC'} · ${be.portMode==='sp_dp'?'Single Port / Dual Plane':be.portMode==='dp_dp'?'Dual Port / Dual Plane':'Single Port / Single Plane'}`:''}</text>`;
+    <text x="600" y="48" text-anchor="middle" fill="#64748b" font-size="10">${nodes} deployed compute units / ${be.gpus} GPUs · ${suMode==='off'?'SU off':suPlan.suCount+' × '+suPlan.suNodes+'-node SU'} · ${top==='rail'?'Rail-Optimized':'Classic'} · ${planeLabel}${be.isCustom?` · ${be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':be.nicProfile==='cx9-rubin-ncra'?'ConnectX-9 / Rubin NVL8 NCRA 2×800G':be.nicProfile==='cx9-rubin-nvl72'?'ConnectX-9 / Rubin NVL72':be.nicProfile==='cx9-rubin-nvl72-octal'?'ConnectX-9 / Rubin NVL72 octal-plane':'Custom NIC'} · ${be.portMode==='octal'?'Octal-Plane (8 × 200G lanes/GPU)':be.portMode==='sp_dp'?'Single Port / Dual Plane':be.portMode==='dp_dp'?'Dual Port / Dual Plane':'Single Port / Single Plane'}`:''}</text>`;
 
   const railLeafStrip=(x,y,w,count,color,fill,planeName)=>{
     const visible=be.railCount||Math.min(count,8), gap=5, tileW=(w-gap*(visible-1))/visible;
@@ -2298,7 +2500,7 @@ function topologyVisual(ctx){
     svg += `<text x="600" y="67" text-anchor="middle" fill="#a78bfa" font-size="10" font-weight="700">3-TIER CISCO RA · ${be.superspinesPerPlane} SUPERSPINES/PLANE · SPINE↔SS ${be.linksPerSpineSuperPair400}×400G/PAIR · 1:1</text>`;
   }
   svg += `<text x="300" y="82" text-anchor="middle" fill="#22d3ee" font-size="11" font-weight="700">GPU BACKEND — PLANE 1 · ${be.speed}G / GPU LINK</text>`;
-  svg += box(160,95,280,58,`${be.spinesPerPlane} × ${pid} Spine${be.spinesPerPlane===1?'':'s'}`,`${be.physicalLeafSpineLinks/be.planes} × 800G · ${backendOpticPid} · ${backendOpticMedia}`,'#0891b2','#071b29');
+  svg += box(160,95,280,58,`${be.spinesPerPlane} × ${pid} Spine${be.spinesPerPlane===1?'':'s'}`,be.g300Planning?`${be.physicalLeafSpineLinks/be.planes} × 1600G equivalent cages · optic TBD`:`${be.physicalLeafSpineLinks/be.planes} × 800G · ${backendOpticPid} · ${backendOpticMedia}`,'#0891b2','#071b29');
   if(top==='rail'){
     svg += railLeafStrip(145,190,310,be.leavesPerPlane,'#22d3ee','#08202f','Rail-optimized');
     svg += line(300,153,300,190,'#22d3ee',3);
@@ -2310,7 +2512,7 @@ function topologyVisual(ctx){
   // Backend plane 2
   if(be.planes===2){
     svg += `<text x="900" y="82" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="700">GPU BACKEND — PLANE 2 · ${be.speed}G / GPU LINK</text>`;
-    svg += box(760,95,280,58,`${be.spinesPerPlane} × ${pid} Spine${be.spinesPerPlane===1?'':'s'}`,`${be.physicalLeafSpineLinks/be.planes} × 800G · ${backendOpticPid} · ${backendOpticMedia}`,'#2563eb','#07172a');
+    svg += box(760,95,280,58,`${be.spinesPerPlane} × ${pid} Spine${be.spinesPerPlane===1?'':'s'}`,be.g300Planning?`${be.physicalLeafSpineLinks/be.planes} × 1600G equivalent cages · optic TBD`:`${be.physicalLeafSpineLinks/be.planes} × 800G · ${backendOpticPid} · ${backendOpticMedia}`,'#2563eb','#07172a');
     if(top==='rail'){
       svg += railLeafStrip(745,190,310,be.leavesPerPlane,'#60a5fa','#0a1c33','Rail-optimized');
       svg += line(900,153,900,190,'#60a5fa',3);
@@ -2654,6 +2856,10 @@ function calc(){
   const isRubinNvl8=(platform==='rubin-hgx'||platform==='rubin-nvl8-rack');
   const rackScalePid=isRackScale?($('rackScalePid')?.value||''):null;
   const rubinRackPid=platform==='rubin-nvl8-rack';
+  // NCRA option: Vera Rubin backend moves to 102.4T / 1.6T-cage Spectrum-6 at 2×800G/GPU.
+  const ncraRubin=['rubin-nvl72','rubin-hgx','rubin-nvl8-rack'].includes(platform)&&$('req-ncpra')?.value==='guide';
+  // NCRA option: GB300 and B300 use the quad-plane fabric on Spectrum-4 N9164E-NS4-O.
+  const ncraQuad=['gb300-nvl72','b300','supermicro-b300'].includes(platform)&&$('req-ncpra')?.value==='guide';
   const rackScaleGpusPerUnit=platform==='gb300-nvl72'||platform==='rubin-nvl72'?72:(rubinRackPid?72:8);
   const customGpusPerNode=isCustom?Math.max(1,+$('customGpusPerNode').value||8):(isRackScale?rackScaleGpusPerUnit:8);
   const customNicProfile=isCustom?($('customNicProfile').value||'cx8'):null;
@@ -2674,6 +2880,9 @@ function calc(){
       linksPerServer:amdNicsPerServer,
       physicalPortsPerServer:amdNicsPerServer
     };
+  }else if(isRubinNvl8&&ncraRubin){
+    customBackendProfile={nicProfile:'cx9-rubin-ncra',portMode:'dp_dp',planes:2,
+      hostInterfaceSpeed:800,linkSpeed:800,linksPerGpu:2,physicalPortsPerGpu:2};
   }else if(isRubinNvl8){
     const rubinMode=$('rubinNicMode')?.value||'sp_dp';
     const dualPlane=rubinMode==='sp_dp';
@@ -2702,7 +2911,11 @@ function calc(){
   const gpuModel=isCustom?($('customGpuModel').value.trim()||'Custom GPU'):
     (isB300?'NVIDIA B300':isAmdMi355x?'AMD Instinct MI355X':platform==='gb300-nvl72'?'NVIDIA GB300':platform==='rubin-nvl72'||(platform==='rubin-hgx'||platform==='rubin-nvl8-rack')?'NVIDIA Vera Rubin':platform==='h200'?'NVIDIA H200':'GPU');
   if(platform==='gb300-nvl72'||platform==='rubin-nvl72'){ $('backendTopology').value='rail'; $('backendTopology').disabled=true; }
-  const mode=isB300?$('b300mode').value:((isCustom||isRubinNvl8||isAmdMi355x)?'custom':'single800'),top=$('backendTopology').value,pid=$('backendSwitch').value;
+  const mode=isB300?$('b300mode').value:((isCustom||isRubinNvl8||isAmdMi355x)?'custom':'single800'),top=$('backendTopology').value,pid=ncraRubin?NCRA_RUBIN_SWITCH:ncraQuad?'N9164E-NS4-O':$('backendSwitch').value;
+  const g300Selected=pid==='N9364F-SG3-A',highRadix=HIGH_RADIX_SWITCHES[pid]||null;
+  if(g300Selected&&!['rubin-nvl72','rubin-hgx','rubin-nvl8-rack'].includes(platform))throw Error('G300 planning is available only for Vera Rubin profiles.');
+  const backendCooling=switchCoolingPlan($('backendCoolingOption')?.value||'modeled',pid);
+  if($('backendCoolingNote'))$('backendCoolingNote').innerHTML=switchCoolingReferenceHtml(backendCooling);
   if(isAmdMi355x){
     if($('backendSwitch')){
       $('backendSwitch').disabled=false;
@@ -2719,14 +2932,20 @@ function calc(){
     $('backendOptic').disabled=false;
   }
   if(!isAmdMi355x && $('backendSwitch')){
-    $('backendSwitch').disabled=false;
-    $('backendSwitch').title='';
+    $('backendSwitch').disabled=ncraRubin||ncraQuad;
+    $('backendSwitch').title=ncraRubin?`NCRA requirements option: Vera Rubin backend uses ${NCRA_RUBIN_SWITCH}. Set NCP-RA requirements to Not requested to restore this selection.`
+      :ncraQuad?'NCRA requirements option: quad-plane fabric on N9164E-NS4-O (Spectrum-4). Set NCP-RA requirements to Not requested to restore this selection.':'';
   }
+  if($('b300mode')&&isB300){$('b300mode').disabled=ncraQuad;$('b300mode').title=ncraQuad?'NCRA requirements option: quad-plane, 4 × 200G per GPU.':'';}
+  if(ncraRubin&&$('rubinNicMode'))$('rubinNicMode').disabled=isRubinNvl8;
+  else if($('rubinNicMode'))$('rubinNicMode').disabled=false;
+  if(highRadix&&$('backendOptic')){$('backendOptic').value='OSFP-800G-DR8';$('backendOptic').disabled=true;}
+  if($('backendOpticLabel'))$('backendOpticLabel').textContent=highRadix?`Host optical media planning — ${highRadix.short} switch optic TBD`:'800G backend optic';
   const backendOpticBase=$('backendOptic')?.value||'OSFP-800G-DR8';
-  const backendOpticPid=`${backendOpticBase}=`;
+  const backendOpticPid=highRadix?highRadix.opticPid:`${backendOpticBase}=`;
   const backendOpticIsVr8=backendOpticBase==='OSFP-800G-VR8';
-  const backendOpticMedia=backendOpticIsVr8?'MMF':'SMF';
-  const backendOpticReach=backendOpticIsVr8?'50 m':'500 m';
+  const backendOpticMedia=highRadix?'TBD':backendOpticIsVr8?'MMF':'SMF';
+  const backendOpticReach=highRadix?'TBD':backendOpticIsVr8?'50 m':'500 m';
   // Keep server/NIC-side optics in the same optical family as the selected switch-side optic.
   // NVIDIA validation references the base Cisco module P/N without '=', while BOM/CCW
   // uses Cisco spare-ordering format with a trailing '='.
@@ -2775,8 +2994,14 @@ function calc(){
   }
 
   let be;
-  const cloudRaRequired=platform==='gb300-nvl72'&&$('gb300RaPolicy')?.value==='cisco-cloud-ra';
-  const makeBackend=n=>['gb300-nvl72','rubin-nvl72'].includes(platform)?nvl72BackendDesign(platform,n,cloudRaRequired?'cisco-cloud-ra':'engineering',+$('gb300RaTargetRacks')?.value||0):backendDesign(rubinRackPid?n*9:n,mode,top,rubinRackPid?8:customGpusPerNode,customBackendProfile);
+  const cloudRaSelected=platform==='gb300-nvl72'&&$('gb300RaPolicy')?.value==='cisco-cloud-ra';
+  const cloudRaRequired=cloudRaSelected&&!ncraQuad;
+  const makeBackend=n=>{
+    const seed=['gb300-nvl72','rubin-nvl72'].includes(platform)?nvl72BackendDesign(platform,n,cloudRaRequired?'cisco-cloud-ra':'engineering',+$('gb300RaTargetRacks')?.value||0):backendDesign(rubinRackPid?n*9:n,mode,top,rubinRackPid?8:customGpusPerNode,customBackendProfile);
+    if(ncraRubin&&platform==='rubin-nvl72')return ncraRubinOctalPlaneDesign(n,pid);
+    if(ncraQuad)return ncraQuadPlaneDesign(platform,n);
+    return highRadix?rubinG300BackendDesign(seed,pid):seed;
+  };
   if(suFabric==='independent' && suMode!=='off' && !cloudRaRequired){
     const one=makeBackend(suPlan.suNodes);
     be={...one,gpus:nodes*customGpusPerNode,totalGpus:nodes*customGpusPerNode,
@@ -2788,6 +3013,10 @@ function calc(){
       physicalSpineSuperLinks:(one.physicalSpineSuperLinks||0)*suPlan.suCount,spineSuperOptics:(one.spineSuperOptics||0)*suPlan.suCount,
       atTwoTierBoundary:one.atTwoTierBoundary,exceedsTwoTier:one.exceedsTwoTier,fabricTier:one.fabricTier,suIndependent:true};
   }else be=makeBackend(nodes);
+  if($('g300PlanningNote')){
+    $('g300PlanningNote').style.display=highRadix?'block':'none';
+    $('g300PlanningNote').innerHTML=ncraRubin?`<b class="warn">NCRA Vera Rubin backend — ${pid}</b><br>NVIDIA Spectrum-6 · 102.4 Tb/s · 64×1.6T OSFP · liquid cooled (NVIDIA MGX). The NCRA requirements option replaces the 51.2T backend for Vera Rubin: ${be.octalPlane?`octal-plane design — 8 planes × one 200G lane/GPU (1.6T/GPU), 4 rails, ${be.scalableUnits} × ${be.suRacks}-rack SU${be.scalableUnits===1?'':'s'}, spines provisioned for a ${be.spineBandSu}-SU band; two-tier through ${be.maxScalableUnits} SUs (${be.twoTierGpuCeiling.toLocaleString()} GPUs). Tray-to-leaf lane shuffle required${be.leafSpineShuffle?'; leaf-to-spine shuffle required above 32 SUs':''}.`:`${be.planes} planes × 2×800G CX9 links/GPU (1.6T/GPU) with ${1600/be.speed} logical 800G branches per 1.6T cage.`} ${be.totalLeaves} leaves + ${be.totalSpines} spines across ${be.planes} plane(s). ${be.portMapVerified?'Whole-link/cage arithmetic fits the assumed two-tier map.':'Two-tier map does not fit; switch counts are estimates and a qualified third tier is required.'} Exact rail/plane mapping, switch/host optics, cabling, software and orderability require Cisco/NVIDIA validation. <b class="bad">Switch electrical power, installed weight and coolant data are TBD; facility totals are incomplete.</b> <a href="${be.source}" target="_blank" rel="noopener">Cisco liquid-cooled MGX model</a>`:g300Selected?`<b class="warn">G300 / Rubin engineering planning</b><br>N9364F-SG3-A · Silicon One G300 · 102.4 Tb/s · 64×1.6T OSFP · 3RU air cooled. This profile models ${be.speed}G host links with ${1600/be.speed} logical branches per 1.6T cage. ${be.totalLeaves} leaves + ${be.totalSpines} spines across ${be.planes} plane(s). ${be.portMapVerified?'Whole-link/cage arithmetic fits the assumed two-tier map.':'Two-tier map does not fit; switch counts are estimates and a qualified third tier is required.'} Exact Rubin rail/plane mapping, switch/host optics, cabling, software and orderability require Cisco/OEM validation. <b class="bad">Switch electrical power and installed weight are TBD; facility totals are incomplete.</b> <a href="${be.source}" target="_blank" rel="noopener">Cisco G300 platform reference</a>`:'';
+  }
   if(platform==='gb300-nvl72'&&be.gb300CompactTwoTier)window.CURRENT_SU_DESC=`${nodes} deployed GB300 racks · engineered two-tier fabric · ${be.fabricRacks}-rack modeled capacity per fabric; growth requires recalculation`;
   const backendScalability=platform==='gb300-nvl72'?gb300Scalability(be):null;
   if($('backendScalability')){
@@ -2827,7 +3056,7 @@ function calc(){
   const oobUplinkLinks=oobFabricMode==='stp1g'?(oobStpLeafLinks+oobStpPeerLinks):oobLeafSpineLinks;
   const oob=oobLeaves+oobSpines+oobAggregators;
   const oobBreakdown=platform==='gb300-nvl72'
-    ? `${gb300Oob.aggregationLabel}: ${gb300Oob.inRackMgmtSwitches} in-rack N93108TC-FX3 ToRs · ${gb300Oob.rackTor100gLinks} physical rack uplinks${gb300Oob.aggregationPid?` · ${gb300Oob.aggregationSwitches||gb300Oob.oobSpines} × ${gb300Oob.aggregationPid}`:''} · ${gb300Oob.lowSpeedLeaves} shared low-speed OOB leaves`
+    ? `${gb300Oob.aggregationLabel}: ${gb300Oob.inRackMgmtSwitches} in-rack N93108TC-FX3-MGX ToRs · ${gb300Oob.rackTor100gLinks} physical rack uplinks${gb300Oob.aggregationPid?` · ${gb300Oob.aggregationSwitches||gb300Oob.oobSpines} × ${gb300Oob.aggregationPid}`:''} · ${gb300Oob.lowSpeedLeaves} shared low-speed OOB leaves`
     : `Compute ${nodes} · Mgmt/Control ${mgmt} · Backend Leafs ${backendLeafOob} · Backend Spines ${backendSpineOob}${frontendEnabled?` · Frontend Leafs ${frontendLeafOob} · Frontend Spines ${frontendSpineOob}`:''}${vastEnabled?` · Storage Leafs ${storageLeafOob}${storageSpineOob?` · Storage Spines ${storageSpineOob}`:''} · VAST ${eq*2}`:''}${ndNodeCount?` · Nexus Dashboard ${ndNodeCount}`:''}`;
   const oobModeSummary=oobFabricMode==='stp1g'
     ? (oobAggregators?`${oobAggregators} × N93108TC-FX3 aggregators · ${oobStpLeafLinks} leaf uplinks + ${oobStpPeerLinks} inter-aggregator STP link${oobStpPeerLinks===1?'':'s'} · 1GBASE-T copper · no optics`:'flat redundant pair')
@@ -2838,7 +3067,7 @@ function calc(){
         ? `<b class="warn">Guardrail applied:</b> ${nodes} NVL72 racks exceeds the 2-rack limit for direct/STP OOB, so the effective design has been forced to <b>spine-leaf</b>. `
         : '';
       const modeText=gb300Oob.selectedMode==='direct'
-        ? `Direct OOB/core handoff selected. The ${gb300Oob.inRackMgmtSwitches} in-rack N93108TC-FX3 switches uplink directly to the customer's OOB/core; no extra Cisco OOB aggregation switches are added.`
+        ? `Direct OOB/core handoff selected. The ${gb300Oob.inRackMgmtSwitches} in-rack N93108TC-FX3-MGX switches uplink directly to the customer's OOB/core; no extra Cisco OOB aggregation switches are added.`
         : gb300Oob.selectedMode==='stp'
           ? `Simple Layer-2/STP aggregation selected. Add a redundant <b>N93108TC-FX3</b> aggregation pair. This option is allowed only for up to 2 NVL72 racks.`
           : `Spine-leaf OOB selected. Rack-management uplinks are modeled into redundant <b>N9336C-SE1</b> routed spine blocks using 100G uplinks.`;
@@ -2849,10 +3078,15 @@ function calc(){
         : `High-speed OOB selected: N93108TC-FX3 leaves are dual-homed to redundant <b>N9336C-SE1 100G routed spine blocks</b> using QSFP-100G-DR-S= optics.`;
     }
   }
-  const theoreticalTwoTierGpuBoundary=be.gb300Nvl72Ra?8192:Math.floor((51200/be.speed)*(25600/be.speed)/(be.logicalPerGpu/be.planes));
+  const modeledSwitchBandwidth=be.switchCapacityGbps||51200;
+  const theoreticalTwoTierGpuBoundary=be.gb300Nvl72Ra?8192:Math.floor((modeledSwitchBandwidth/be.speed)*(modeledSwitchBandwidth/2/be.speed)/(be.logicalPerGpu/be.planes));
   const largeScaleReview=be.fabricTier!=='2-tier';
   const atLargeScaleBoundary=be.atTwoTierBoundary;
-  if(be.gb300CloudRa){
+  if(be.ncraQuadPlane){
+    $('fabricScaleNote').innerHTML=`<b class="${be.portMapVerified?'good':'bad'}">NCRA quad-plane ${be.fabricTier} fabric${be.portMapVerified?'':' exceeds the modeled range'}.</b><br>${be.gpus} GPUs · ${be.scalableUnits} × ${be.suUnits}-${be.suUnitLabel} SU${be.scalableUnits===1?'':'s'} · ${be.leavesPerPlane} leaves + ${be.spinesPerPlane} spines${be.superspinesPerPlane?` + ${be.superspinesPerPlane} superspines (${be.suGroups} × ${NCRA_QUAD_GROUP_SU}-SU rail group${be.suGroups===1?'':'s'})`:''} per plane × 4 planes on N9164E-NS4-O in 256 × 200G mode. Two-tier through ${NCRA_QUAD_TWO_TIER_SU} SUs (${be.twoTierGpuCeiling.toLocaleString()} GPUs); three-tier to ${NCRA_QUAD_MAX_SU} SUs. Tray/node-to-leaf lane shuffle required${be.leafSpineShuffle?'; leaf-to-spine shuffle required at this scale':''}. Exact shuffle hardware, optics and cabling require validation.`;
+  }else if(highRadix){
+    $('fabricScaleNote').innerHTML=`<b class="warn">${highRadix.short} ${be.fabricTier} planning</b><br>${be.gpus} GPUs; ${be.leavesPerPlane} leaves and ${be.spinesPerPlane} spines per plane. 64×1.6T cages / 102.4T, with ${be.speed}G logical links. Modeled two-tier ceiling: ${be.twoTierGpuCeiling.toLocaleString()} GPUs for this NIC/plane profile, with additional switches and cabling as needed. ${be.portMapVerified?'Whole-link port arithmetic fits.':'A complete two-tier map does not fit; a separately qualified third tier and its inventory are required.'} Exact optics, OEM rail/plane mapping and physical facilities remain unqualified.`;
+  }else if(be.gb300CloudRa){
     $('fabricScaleNote').innerHTML=`<b class="${be.aggregatePortBudgetVerified?'warn':'bad'}">Cisco Cloud RA required — backend capacity ${be.aggregatePortBudgetVerified?'planned':'exceeded'}.</b><br>${nodes} deployed racks / ${be.gpus} GPUs; reserved leaf/spine capacity ${be.fabricRacks} racks / ${be.fabricGpus} GPUs. ${be.totalLeaves} leaves + ${be.totalSpines} spines + ${be.totalSuperspines} superspines across two planes. ${be.raSourceTables}, updated ${be.raSourceUpdated}. ${be.totalSuperspines?`${be.raGroupCount} × ${be.raGroupRacks}-rack SU-groups; superspine core reserved for ${be.raCoreCapacityRacks} racks. ${be.raBlockDerived?'Intermediate block sizing is derived, not an exact published BOM row.':'Switch quantities match a published BOM row.'} Three tiers are selected from day one when planned capacity exceeds 64 racks. Exact SU-group and port wiring requires review.`:'Two-tier fabric follows the published quantity anchor.'} Host optics and host cables follow deployed GPUs; switch-side host optics reserve the leaf/spine capacity. Full-system deviations are listed in QA.`;
   }else if(be.gb300CompactTwoTier){
     $('fabricScaleNote').innerHTML=`<b class="good">GB300 two-tier port-capacity design.</b><br>${be.gpus} GPUs · ${be.leavesPerPlane} leaves and ${be.spinesPerPlane} spines per plane · ${be.linksPerLeafSpinePair400}×400G per leaf-spine pair. Four rails are distributed across leaves with at most 64 host links each. Uplink bandwidth is at least host bandwidth; superspines are unnecessary. This derived rack-to-leaf mapping requires cabling validation.`;
@@ -2920,7 +3154,7 @@ function calc(){
     const pw=(powerBasis==='typical'&&spec.powerTypicalW)?spec.powerTypicalW:(spec.powerMaxW||0);
     const wt=(weightBasis==='gross'&&spec.weightGrossKg)?spec.weightGrossKg:(spec.weightNetKg||0);
     const powerKnown=pw>0,weightKnown=wt>0;
-    if(!powerKnown&&!weightKnown)return;
+    if(!powerKnown&&!weightKnown&&!spec.g300)return;
     physRows.push({name,qty,powerW:pw,totalPowerW:qty*pw,weightKg:wt,totalWeightKg:qty*wt,powerKnown,weightKnown,isNetwork:Object.values(PHYSICAL.switch).includes(spec),source:spec.source});
   }
   pRow(serverSpec.name,nodes,{...serverSpec,powerTypicalW:null});
@@ -3062,13 +3296,13 @@ function calc(){
     ? mgmtOobSwitchCount
     : (oobEnabled?oob:'Off');
   $('kOob').title=platform==='gb300-nvl72'
-    ? `${gb300Oob.inRackMgmtSwitches||0} rack-management N93108TC-FX3 + ${oobEnabled&&gb300Oob.aggregationRequired?(gb300Oob.highSpeedAggregationSwitches||0):0} OOB aggregation N9336C-SE1 + ${oobEnabled?(gb300Oob.lowSpeedLeaves||0):0} shared low-speed OOB N93108TC-FX3 + ${mgmtEnabled?(gb300MgmtFabric.leaves||0):0} management N9332D-GX2B`
+    ? `${gb300Oob.inRackMgmtSwitches||0} rack-management N93108TC-FX3-MGX + ${oobEnabled&&gb300Oob.aggregationRequired?(gb300Oob.highSpeedAggregationSwitches||0):0} OOB aggregation N9336C-SE1 + ${oobEnabled?(gb300Oob.lowSpeedLeaves||0):0} shared low-speed OOB N93108TC-FX3 + ${mgmtEnabled?(gb300MgmtFabric.leaves||0):0} management N9332D-GX2B`
     : `${oobEnabled?oob:0} OOB switches`;
   $('vastMetrics').innerHTML=vastEnabled?`<b>${eq} × ${EBOX[ekey].name}</b> · CCW: VAST-DATA-MLB → VAST-DATA-SPLUS<br><br>Raw <span class="mono">${vc.rawPb.toFixed(3)} PB</span> · Usable <span class="mono">${vc.usablePb.toFixed(3)} PB / ${vc.usablePib.toFixed(3)} PiB</span> · Logical @ ${drr.toFixed(1)}:1 <span class="mono">${(vc.usablePb*drr).toFixed(3)} PB</span><br>Storage leaf pairs: <span class="mono">${vn.pairs}</span> · EBoxes/pair ${vn.dist.join('/')} · 400G uplinks/switch ${vn.uplinksPerSwitch.join('/')}<br><b>CCW / VAST-DATA-MLB:</b> ${vastCapacityLicenses} × VAST-SW-1TB · ${vastCoreLicenses} × VAST-SW-1CPU-CORE · ${vastTerm} months`:`<b>VAST disabled.</b> Storage hardware, networking, software and services are excluded.`;
 
   $('summary').innerHTML=`${window.CURRENT_CUSTOMER_NAME?`<b>Customer:</b> ${window.CURRENT_CUSTOMER_NAME}<br>`:''}${requestedNodes*customGpusPerNode===512?'<b>512-GPU design:</b> verify applicable scale-unit/CVD model for the selected server.<br>':''}<b>Sizing basis:</b> ${sizingBasis==='power'?`${computePowerBudgetKw.toFixed(0)} kW compute power budget · ${sizingPower.label} · ${requestedNodes} derived compute units`:'node / rack-scale-unit count'}<br><b>Spare policy:</b> ${sparePct.toFixed(1)}% · ${spareScope==='all'?'all physical BOM items':spareScope==='optics'?'optics & cables only':'hardware only'}<br><b>Compute:</b> ${requestedNodes} requested → ${nodes} deployed ${rubinRackPid||platform==='gb300-nvl72'||platform==='rubin-nvl72'?'racks':'servers'} / ${be.gpus} GPUs · ${isCustom?($('customServerName').value.trim()||'Custom GPU Server'):serverSpec.name} · ${gpuModel} · ${customGpusPerNode} GPU${customGpusPerNode===1?'':'s'}/${rubinRackPid||platform==='gb300-nvl72'||platform==='rubin-nvl72'?'rack':'server'}${computeCcw?`<br><b>Compute CCW:</b> ${computeMlb} → ${(computeAtoMeta?.short||computeAto)} (${computeAto}) × ${nodes} · power cable required in configurator.`:''} · ${(computePowerW/1000).toFixed(1)} kW max · ${computeWeightKg.toFixed(2)} kg installed.<br><b>Backend requirement:</b> ${be.backendLabel} · ${be.physicalHostLinks} physical host links total.<br><b>Backend optic:</b> ${backendOpticPid} · ${backendOpticMedia} · ${backendOpticReach}.<br><b>Scale Units:</b> ${suMode==='off'?'Not enforced':`${suPlan.suCount} × ${suPlan.suNodes}-node / ${suPlan.suNodes*customGpusPerNode}-GPU SU`} · ${suFabric==='independent'?'independent backend fabric per SU':'shared cluster fabric'}${suMode!=='off'?` · ${requestedNodes} requested → ${suPlan.deployedNodes} fabric-cabled nodes`:''}.<br><b>Backend:</b> ${top==='rail'?'Rail-optimized':'Classic'} ${be.planes}-plane ${be.fabricTier==='2-tier'?'leaf/spine':'leaf/spine/superspine'} fabric using ${pid}. ${be.totalLeaves} leaves + ${be.totalSpines} spines${be.totalSuperspines?` + ${be.totalSuperspines} superspines`:''}; ${be.logicalLeafSpineLinks||0} logical ${be.speed}G leaf-spine links${be.totalSuperspines?` + ${be.logicalSpineSuperLinks} logical 400G spine-superspine links`:''}. ${be.ciscoCx8DualRA?'Cisco RA 1:1 model.':''}<br><b>Frontend:</b> ${frontendEnabled?(platform==='gb300-nvl72'?(fe.collapsed?`${fe.host400Ports} × 400G BlueField-3 north-south ports · ${fe.leaves} × N9364E-SG2X-O collapsed converged pair (Cisco 2-rack minimum network tier).`:`${fe.host400Ports} × 400G BlueField-3 north-south ports · ${fe.leaves} N9364E-SG2X-O leaves + ${fe.spines} spines.`):`${feLinks}×200G per compute${mgmtEnabled?' and management/control':''} node, ${fe.leaves} leaves + ${fe.spines} spines, ${feOver}:1 target oversubscription.`):'Disabled — no compute frontend switches or optics included.'}<br>
 <b>Management / OOB:</b> ${platform==='gb300-nvl72'
-  ? `${gb300Oob.inRackMgmtSwitches||0} rack-management N93108TC-FX3${oobEnabled?` + ${gb300Oob.lowSpeedLeaves||0} shared low-speed OOB N93108TC-FX3`:''}${mgmtEnabled?` + ${gb300MgmtFabric.leaves||0} management N9332D-GX2B`:''} = ${mgmtOobSwitchCount} dedicated management/OOB switches. Shared converged N9364E spines are counted under frontend/converged, not again here.`
+  ? `${gb300Oob.inRackMgmtSwitches||0} rack-management N93108TC-FX3-MGX${oobEnabled?` + ${gb300Oob.lowSpeedLeaves||0} shared low-speed OOB N93108TC-FX3`:''}${mgmtEnabled?` + ${gb300MgmtFabric.leaves||0} management N9332D-GX2B`:''} = ${mgmtOobSwitchCount} dedicated management/OOB switches. Shared converged N9364E spines are counted under frontend/converged, not again here.`
   : (oobEnabled?`${oob} OOB switches`:'OOB disabled.')}<br><b>Management / Controllers:</b> ${mgmtEnabled?`${mgmt} × ${mgmtServerName} · ${mgmtServerRu}U each · ${(mgmtServerPowerW/1000).toFixed(1)} kW/node · ${mgmtServerWeightKg.toFixed(0)} kg/node.${mgmtMlbPid?`<br><b>Management CCW:</b> ${mgmtMlbPid} → ${mgmtServerPid} × ${mgmt}; configure CPU, memory, storage, VIC and PSUs under the MLB.`:''}`:'Disabled.'}<br><b>VAST:</b> ${vastEnabled?`VAST-DATA-MLB · ${eq} EBoxes · ${vastCapacityLicenses} × VAST-SW-1TB · ${vastCoreLicenses} × VAST-SW-1CPU-CORE · ${vn.switches} N9332D-GX2B storage leaves · ${vn.totalUplinkLinks} physical 400G storage uplinks. ${dedicated?'Dedicated storage frontend spines selected.':'Storage leaves use shared frontend spines.'}`:'Disabled.'}<br><b>OOB Fabric:</b> ${oobEnabled?`${oobLeaves} × N93108TC-FX3 leaves for ${oobEndpoints} management endpoints · ${oobModeSummary}.`:'Disabled.'}${ndEnabled?`<br><b>Nexus Dashboard:</b> ${ndNodeCount} × ND-NODE-G5S (${ndNodeCount===3?'3 primary':'3 primary + '+(ndNodeCount-3)+' secondary'}) · ${ndNodeCount}U · ${(ndPowerW/1000).toFixed(1)} kW planning capacity.`:''}`;
 
 
@@ -3120,12 +3354,20 @@ function calc(){
     add('AI Backend Superspine',pid,'AI fabric superspine switch',be.totalSuperspines,be.gb300CloudRa?`${be.superspinesPerPlane}/plane × 2 planes · ${be.fabricRacks}-rack leaf/spine capacity · ${be.raCoreCapacityRacks}-rack core reservation · Cisco Cloud RA Table 3`:`${be.superspinesPerPlane}/plane × ${be.planes} plane(s) · ${be.ssCoresPerPlane} cores/plane · ${be.ssPerCore} superspines/core`,be.gb300CloudRa?'Published superspine core quantity; incremental SU-group and port wiring require validation':be.gb300DerivedThreeTier?'Derived GB300 Clos from reference port geometry; BU validation required':'Cisco B300/CX8 large-scale RA sample');
   }
   if(isCustom || isRubinNvl8 || isAmdMi355x || platform==='rubin-nvl72'){
-    const nicLabel=be.nicProfile==='amd-mi355x'?`AMD MI355X ${be.speed}G RoCE`:be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':be.nicProfile==='cx9-rubin-nvl72'?'ConnectX-9 / Rubin NVL72':'Custom NIC';
+    const nicLabel=be.nicProfile==='amd-mi355x'?`AMD MI355X ${be.speed}G RoCE`:be.nicProfile==='cx7'?'ConnectX-7':be.nicProfile==='cx8'?'ConnectX-8':be.nicProfile==='cx9-rubin'?'ConnectX-9 / Rubin NVL8':be.nicProfile==='cx9-rubin-ncra'?'ConnectX-9 / Rubin NVL8 NCRA 2×800G':be.nicProfile==='cx9-rubin-nvl72'?'ConnectX-9 / Rubin NVL72':be.nicProfile==='cx9-rubin-nvl72-octal'?'ConnectX-9 / Rubin NVL72 octal-plane':'Custom NIC';
     let customHostPid,customHostDesc,customHostStatus;
-    if(be.nicProfile==='cx9-rubin-nvl72'){
+    if(be.nicProfile==='cx9-rubin-nvl72-octal'){
+      customHostPid='TBD-1600G-CX9-OCTAL-HOST';
+      customHostDesc='1.6T OSFP host optic for Rubin NVL72 ConnectX-9 · 2 × 800G MPO · 8 × 200G plane lanes';
+      customHostStatus=`72 host OSFP cages/rack (two bundled ConnectX-9 per cage); ${be.hostMpoConnectors} MPO connectors; exact optic, tray-to-leaf shuffle and Cisco interoperability require validation`;
+    }else if(be.nicProfile==='cx9-rubin-nvl72'){
       customHostPid='TBD-800G-CX9-NVL72-HOST';
       customHostDesc='800G OSFP host optic for Rubin NVL72 ConnectX-9';
       customHostStatus='144 host ports/rack from preliminary NVIDIA DGX VR specifications; exact Supermicro optic, cable and Cisco interoperability require validation';
+    }else if(be.nicProfile==='cx9-rubin-ncra'){
+      customHostPid='TBD-800G-CX9-NCRA-HOST';
+      customHostDesc='800G OSFP host optic for Rubin NVL8 ConnectX-9 · NCRA 2×800G/GPU';
+      customHostStatus='NCRA guide 1.6T/GPU as two 800G ports across two planes; exact Supermicro NIC population, optic, cable and Cisco interoperability require validation';
     }else if(be.nicProfile==='cx9-rubin'){
       customHostPid='MMS4X00-NM-HGX';
       customHostDesc='NVIDIA 800G twin-port OSFP host optic · 2×400G · SMF · dual DR4 · 500 m';
@@ -3165,7 +3407,7 @@ function calc(){
     }
     const customHostBasis=be.profileBasis==='server'
       ? `${nicLabel} · ${be.physicalPortsPerServer} physical host optic${be.physicalPortsPerServer===1?'':'s'}/server → ${be.linksPerServer} × ${be.speed}G active link${be.linksPerServer===1?'':'s'}/server across ${be.planes} plane${be.planes===1?'':'s'} · ${be.physicalHostLinks} logical host links total`
-      : `${nicLabel} · ${be.portMode==='sp_dp'?'Single Port / Dual Plane':be.portMode==='dp_dp'?'Dual Port / Dual Plane':'Single Port / Single Plane'} · ${be.physicalPortsPerGpu} physical host optic${be.physicalPortsPerGpu===1?'':'s'}/GPU → ${be.logicalPerGpu} × ${be.speed}G active network link${be.logicalPerGpu===1?'':'s'} · ${be.physicalHostLinks} logical host links total`;
+      : `${nicLabel} · ${be.portMode==='octal'?'Octal-Plane (8 × 200G lanes/GPU)':be.portMode==='sp_dp'?'Single Port / Dual Plane':be.portMode==='dp_dp'?'Dual Port / Dual Plane':'Single Port / Single Plane'} · ${be.physicalPortsPerGpu} physical host optic${be.physicalPortsPerGpu===1?'':'s'}/GPU → ${be.logicalPerGpu} × ${be.speed}G active network link${be.logicalPerGpu===1?'':'s'} · ${be.physicalHostLinks} logical host links total`;
     add('AI Backend Host Optics',customHostPid,customHostDesc,be.hostOptics,
       customHostBasis,
       customHostStatus);
@@ -3186,6 +3428,30 @@ function calc(){
   if(be.totalSuperspines){
     add('AI Backend Optics',backendOpticPid,`800G ${opticFamily} spine-superspine optical endpoint`,be.spineSuperOptics,`${be.physicalSpineSuperLinks} 800G-equivalent links × 2 endpoints · ${be.logicalSpineSuperLinks} logical 400G links · 1:1`,tmgStatus(pid,backendOpticPid));
     if(be.gb300DerivedThreeTier||be.gb300CloudRa)add('AI Backend Cabling','CB-M12-M12-SMF','MPO-12 SMF cable — spine to superspine',be.physicalSpineSuperLinks*2,'Two MPO-12 cables per 800G DR8 link',be.gb300CloudRa?'Cisco GB300 Cloud RA Table 3; reserved fabric capacity':'Derived GB300 three-tier cabling');
+  }
+  if(be.ncraQuadPlane){
+    add('AI Backend Cabling','CB-M12-M12-SMF','MPO-12 SMF cable — host optic to lane shuffle layer',be.hostLeafCables,`${be.gpus} host optics × 2 MPO (4 × 100G lanes each)`,'Planning cable family; shuffle-layer connectivity requires validation');
+    add('AI Backend Cabling','CB-M12-M12-SMF','MPO-12 SMF cable — backend leaf to spine',be.leafSpineCables,`${be.physicalLeafSpineLinks} 800G DR8 links × 2 MPO-12`,'Planning cable family; validate polarity and reach');
+    if(be.totalSuperspines)add('AI Backend Cabling','CB-M12-M12-SMF','MPO-12 SMF cable — spine to superspine',be.spineSuperCables,`${be.physicalSpineSuperLinks} 800G DR8 links × 2 MPO-12`,'Planning cable family; validate polarity and reach');
+    BOM.push({cat:'AI Backend Cabling Planning',pid:'TBD-QUAD-PLANE-SHUFFLE',desc:'Quad-plane lane shuffle layer (host to leaf) — design lot, PIDs TBD',qty:1,required:1,spare:0,total:1,
+      basis:`${be.hostLeafCables} host MPO connections remapped to 4 planes${be.leafSpineShuffle?'; leaf-to-spine shuffle also required at this scale':''}`,status:'Not an orderable item; shuffle hardware and cabling require qualification'});
+    BOM.filter(row=>['AI Backend Leaf','AI Backend Spine','AI Backend Superspine'].includes(row.cat)).forEach(row=>row.status='NCRA quad-plane 256 × 200G sizing; validate shuffle and cabling');
+  }
+  if(highRadix){
+    const hs=highRadix.short;
+    // Replace inherited 800G DR8 switch/cable rows; no 102.4T optic PID or
+    // physical fiber-assembly quantity is implied by a logical link budget.
+    BOM=BOM.filter(row=>!['AI Backend Optics','AI Backend Cabling'].includes(row.cat));
+    add('AI Backend Optics',backendOpticPid,`1.6T ${hs} switch-side host-facing optic budget; exact PID TBD`,be.switchHostOptics,
+      `${1600/be.speed}×${be.speed}G logical branches per cage; rounded separately per leaf/plane`,'Unqualified optical budget; confirm exact switch and CX9 interoperability');
+    add('AI Backend Optics',backendOpticPid,`1.6T-equivalent ${hs} fabric optical endpoint budget; exact PID TBD`,be.leafSpineOptics,
+      `${be.physicalLeafSpineLinks} equivalent 1.6T fabric cages × 2 endpoints; ${be.logicalLeafSpineLinks} logical ${be.speed}G branches`,'Whole-link planning only; breakout peers and exact optic/cable assemblies require qualification');
+    BOM.push({cat:'AI Backend Cabling Planning',pid:highRadix.cablingPid,desc:`${hs} cabling design lot — physical fiber assembly counts/PIDs TBD`,qty:1,required:1,spare:0,total:1,
+      basis:`${be.physicalHostLinks} logical host links and ${be.logicalLeafSpineLinks} logical fabric links; this is one unresolved design lot, not one cable`,status:'Not an orderable cable BOM; exact assemblies and quantities require qualification'});
+    BOM.filter(row=>/^AI Backend/.test(row.cat)).forEach(row=>{
+      if(['AI Backend Leaf','AI Backend Spine'].includes(row.cat))row.status=`${hs} 102.4T whole-link planning`;
+      row.status=(row.status||'')+(ncraRubin?' | NCRA Vera Rubin 102.4T backend; physical data and qualification pending':' | G300 / Rubin engineering planning; physical data and qualification pending');
+    });
   }
 
   if(frontendEnabled){
@@ -3277,9 +3543,9 @@ function calc(){
     }
   }
   if(platform==='gb300-nvl72'){
-    add('GB300 Rack Management','N9K-C93108TC-FX3','In-rack management ToR switch for the GB300 NVL72 rack',gb300Oob.inRackMgmtSwitches,
+    add('GB300 Rack Management','N93108TC-FX3-MGX','MGX in-rack management ToR switch for the GB300 NVL72 rack',gb300Oob.inRackMgmtSwitches,
       `2 per GB300 NVL72 rack × ${nodes} active rack${nodes===1?'':'s'}; Cisco-orderable rack-management networking`,
-      'Cisco GB300 NVL72 rack-management option');
+      'Cisco-listed N93108TC-FX3-MGX PID; validate exact MGX optic/software configuration');
 
     if(oobEnabled){
       if(gb300Oob.selectedMode==='direct'){
@@ -3355,15 +3621,20 @@ function calc(){
   $('bomBody').innerHTML=BOM.map(x=>`<tr><td>${x.cat}</td><td class="mono">${x.pid}</td><td>${x.desc}</td><td>${x.required??x.qty}</td><td>${x.spare??0}</td><td><b>${x.total??x.qty}</b></td><td>${x.basis}</td><td><span class="tag">${x.status}</span></td></tr>`).join('');
 
   const q=[];
+  if(ncraQuad&&platform!=='gb300-nvl72')q.push(`<b class="warn">NCRA QUAD-PLANE</b> B300 E-W: ${nodes} node${nodes===1?'':'s'} → ${be.scalableUnits} × 64-node SU${be.scalableUnits===1?'':'s'}; ${be.totalLeaves} leaves + ${be.totalSpines} spines${be.totalSuperspines?` + ${be.totalSuperspines} superspines`:''}, 4 planes × 200G/GPU on N9164E-NS4-O. The B300 mode selector is overridden while NCRA is selected. Tray-to-leaf lane shuffle required.`);
+  if(ncraRubin)q.push(`<b class="warn">NCRA SPECTRUM-6 REVIEW</b> NCRA requirements option places ${pid} (102.4T / 64×1.6T, liquid cooled) for Vera Rubin instead of the 51.2T backend, at 2×800G CX9 links/GPU across two planes. Exact rail/plane mapping, optics, cabling, MGX mounting, software and orderability remain unverified. Switch power, installed weight and coolant data are TBD; facility totals exclude those unknown loads.`);
+  if(g300Selected)q.push('<b class="warn">G300 REVIEW</b> N9364F-SG3-A uses the 102.4T / 64×1.6T cage model and existing Rubin NIC assumptions. Exact OEM rail/plane mapping, optics, cabling, software and orderability remain unverified. Switch power and installed weight are TBD; facility totals exclude those unknown loads. This is not a validated Rubin Cloud RA.');
+  if(backendCooling.required&&!backendCooling.met)q.push('<b class="bad">LIQUID COOLING FAIL</b> '+backendCooling.message);
   if(backendScalability)q.push(`<b class="${backendScalability.status==='EXCEEDED'?'bad':'warn'}">SCALABILITY ${backendScalability.status}</b> Per fabric: installed inventory budget ${backendScalability.installedCapacityRacksPerFabric??'unverified'} racks; ${backendScalability.installedHeadroomRacksPerFabric??'unverified'} spare rack slots; selected topology/model ceiling ${backendScalability.topologyLimitRacksPerFabric} racks. Cisco Cloud RA two-tier boundary: 64 racks. ${backendScalability.growth} ${backendScalability.qualification}`);
   if(cduPlan.qty)q.push(`<b class="${cduPlan.coolingStatus==='FAIL'?'bad':cduPlan.coolingStatus==='REVIEW'?'warn':'good'}">${cduPlan.coolingStatus}</b> CDU cooling: ${cduPlan.heatKw.toFixed(1)} kW compute heat / ${cduPlan.totalCapacityKw} kW total cooling capacity; local rack limits checked individually. Heat basis: 100% modeled compute peak.`);
   if(cduPlan.qty)cduPlan.warnings.forEach(w=>q.push(`<b class="warn">CHECK</b> ${w}`));
   q.push('<b class="good">PLANNING</b> Server peak power is sized at 125% of base maximum (25% headroom). This allowance is applied once; it is separate from rack utilization and is not a measured transient-spike guarantee. Unknown server power remains TBD.');
   if(be.railCount===4)q.push(`<b class="${be.railMappingVerified?'good':'warn'}">${be.railMappingVerified?'PASS':'CHECK'}</b> NVL72 four rails per plane: GPU positions 1-4 across 18 trays = 18 GPUs/rail/rack; ${be.leavesPerRailPerPlane} leaves/rail/plane. ${be.railBasis}.`);
   if(platform==='gb300-nvl72'){
-    q.push(`<b class="${nodes<2?'warn':'good'}">${nodes<2?'STARTER / PRE-PROVISIONED':'PASS'}</b> GB300 E-W: ${nodes} active rack${nodes===1?'':'s'} → ${be.raScaleUnits} Cisco 2-rack network SU${be.raScaleUnits===1?'':'s'} → ${be.fabricRacks}-rack fabric capacity; ${be.totalLeaves} leaves + ${be.totalSpines} spines, dual plane.${nodes<2?' Cisco publishes the N9000 Enterprise RA BOM from 2 racks upward; the 1-rack case is pre-provisioned to that minimum network block.':''}`);
-    q.push(`<b class="good">PASS</b> GB300 E-W host path: ${be.gpus} active GPUs → ${be.hostOptics} OSFPR-800G-DR8 host optics, ${be.switchHostOptics} switch-side OSFP-800G-DR8 optics, ${be.hostLeafCables} MPO-12 host-leaf cables.`);
-    q.push(`<b class="good">PASS</b> GB300 E-W leaf-spine path: ${be.physicalLeafSpineLinks} physical 800G links → ${be.leafSpineOptics} optical endpoints + ${be.leafSpineCables} MPO-12 cables.`);
+    if(be.ncraQuadPlane)q.push(`<b class="warn">NCRA QUAD-PLANE</b> GB300 E-W: ${nodes} rack${nodes===1?'':'s'} → ${be.scalableUnits} × 7-rack SU${be.scalableUnits===1?'':'s'} (${be.fabricRacks}-rack fabric capacity); ${be.totalLeaves} leaves + ${be.totalSpines} spines${be.totalSuperspines?` + ${be.totalSuperspines} superspines`:''}, 4 planes × 200G/GPU. ${be.hostOptics} host optics, ${be.switchHostOptics} switch-side optics, ${be.hostLeafCables} host MPO cables into the lane shuffle layer.`);
+    else q.push(`<b class="${nodes<2?'warn':'good'}">${nodes<2?'STARTER / PRE-PROVISIONED':'PASS'}</b> GB300 E-W: ${nodes} active rack${nodes===1?'':'s'} → ${be.raScaleUnits} Cisco 2-rack network SU${be.raScaleUnits===1?'':'s'} → ${be.fabricRacks}-rack fabric capacity; ${be.totalLeaves} leaves + ${be.totalSpines} spines, dual plane.${nodes<2?' Cisco publishes the N9000 Enterprise RA BOM from 2 racks upward; the 1-rack case is pre-provisioned to that minimum network block.':''}`);
+    if(!be.ncraQuadPlane)q.push(`<b class="good">PASS</b> GB300 E-W host path: ${be.gpus} active GPUs → ${be.hostOptics} OSFPR-800G-DR8 host optics, ${be.switchHostOptics} switch-side OSFP-800G-DR8 optics, ${be.hostLeafCables} MPO-12 host-leaf cables.`);
+    if(!be.ncraQuadPlane)q.push(`<b class="good">PASS</b> GB300 E-W leaf-spine path: ${be.physicalLeafSpineLinks} physical 800G links → ${be.leafSpineOptics} optical endpoints + ${be.leafSpineCables} MPO-12 cables.`);
     if(frontendEnabled){
       if(fe.collapsed){
         q.push(`<b class="warn">STARTER / PRE-PROVISIONED</b> GB300 N-S / converged: ${nodes} active rack${nodes===1?'':'s'} × 36×400G = ${fe.host400Ports} BF3 ports on a 2-switch collapsed N9364E pair. Cisco's published Enterprise RA minimum anchor is 2 racks, so a 1-rack design is treated as a starter within that 2-rack network tier.`);
@@ -3379,7 +3650,7 @@ function calc(){
       q.push(`<b class="good">PASS</b> Per-server low-speed OOB planning: storage ${gb300Oob.storageServerEndpoints} ports + management/control ${gb300Oob.managementServerEndpoints} ports; ${gb300Oob.lowSpeedLeaves} shared low-speed OOB leaves.`);
     }
     if(mgmtEnabled) q.push(`<b class="warn">CUSTOM</b> SAF control cluster uses ${mgmt} management/control nodes (default 5 = 3 OpenShift control + 2 BCM HA). This is a customer-specific baseline and not the full Cisco/NVIDIA Enterprise RA support-node allowance.`);
-    q.push(`<b class="good">PASS</b> GB300 management/OOB switch KPI: ${(gb300Oob.inRackMgmtSwitches||0) + (oobEnabled?(gb300Oob.lowSpeedLeaves||0):0) + (mgmtEnabled?(gb300MgmtFabric.leaves||0):0)} dedicated switches = ${gb300Oob.inRackMgmtSwitches||0} rack-management N93108TC-FX3 + ${oobEnabled?(gb300Oob.lowSpeedLeaves||0):0} shared low-speed OOB N93108TC-FX3 + ${mgmtEnabled?(gb300MgmtFabric.leaves||0):0} management N9332D-GX2B. Shared converged N9364E spines are not double-counted.`);
+    q.push(`<b class="good">PASS</b> GB300 management/OOB switch KPI: ${(gb300Oob.inRackMgmtSwitches||0) + (oobEnabled?(gb300Oob.lowSpeedLeaves||0):0) + (mgmtEnabled?(gb300MgmtFabric.leaves||0):0)} dedicated switches = ${gb300Oob.inRackMgmtSwitches||0} rack-management N93108TC-FX3-MGX + ${oobEnabled?(gb300Oob.lowSpeedLeaves||0):0} shared low-speed OOB N93108TC-FX3 + ${mgmtEnabled?(gb300MgmtFabric.leaves||0):0} management N9332D-GX2B. Shared converged N9364E spines are not double-counted.`);
 
   }
   if(vastEnabled)q.push(`<b class="good">PASS</b> VAST CPU-core licensing: ${eq} EBoxes × ${eboxCpuCores} licensed cores/EBox = ${vastCoreLicenses} VAST-SW-1CPU-CORE licenses. Default hardware profile: 1 × 64-core processor/EBox.`);
@@ -3510,14 +3781,17 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
     q.push(`<b class="good">PASS</b> GB300 NVL72 power model: 140 kW nominal / 142 kW max per rack. Rack constraint checks use 142 kW; installed rack weight remains TBD.`);
   }
   if(platform==='rubin-nvl72'){
-    q.push(`<b class="warn">CHECK</b> Rubin NVL72 backend: 144 x 800G CX9 ports/rack = 1.6 Tbps/GPU; two 800G ports/GPU across two planning planes, four rails/plane. NVIDIA DGX hardware baseline is preliminary; exact Supermicro topology, host optics and Cisco interoperability require validation. Switch sizing uses 51.2T / 64 x 800G, not a 102.4T assumption.`);
+    q.push(`<b class="warn">CHECK</b> Rubin NVL72 backend: 144 x 800G CX9 ports/rack = 1.6 Tbps/GPU; two 800G ports/GPU across two planning planes, four rails/plane. NVIDIA DGX hardware baseline is preliminary; exact Supermicro topology, host optics and Cisco interoperability require validation. Switch sizing uses ${ncraRubin?`the NCRA octal-plane design on ${pid} Spectrum-6 102.4T (512 x 200G): 8 planes x one 200G lane/GPU, ${be.scalableUnits} x ${be.suRacks}-rack SU${be.scalableUnits===1?'':'s'}, ${be.totalLeaves} leaves + ${be.totalSpines} spines, two-tier through ${be.maxScalableUnits} SUs.`:g300Selected?'the G300 102.4T / 64 x 1600G cage model with 2 x 800G breakout planning.':'51.2T / 64 x 800G, not a 102.4T assumption.'}`);
     q.push(`<b class="good">PASS</b> Vera Rubin NVL72 fixed-rack rule: 1 NVL72 system = 1 dedicated physical rack. Power and weight remain TBD.`);
   }
   if(isRackScale){
     q.push(`<b class="good">PASS</b> Compute offering selected: ${rackScalePid} · ${gpuModel} · ${rackScaleGpusPerUnit} GPUs per unit from the supplied Cisco offering table.`);
+    if(isRubinNvl8&&ncraRubin){
+      q.push(`<b class="warn">CHECK</b> Rubin NVL8 NCRA networking profile: ConnectX-9 · 2×800G active links/GPU across two planes (1.6T/GPU per the NCRA guide) on ${pid}. The ConnectX-9 mode selector is overridden while the NCRA option is selected; exact NIC population and host optics require validation.`);
+    }
     if(isRubinNvl8){
-      q.push(`<b class="good">PASS</b> Rubin NVL8 networking profile: ConnectX-9 · one 800G-class OSFP host interface/GPU · ${be.logicalPerGpu}×${be.speed}G active Ethernet link${be.logicalPerGpu===1?'':'s'} · NVIDIA MMS4X00-NM-HGX host optic · SMF / 2×DR4 / 500 m.`);
-      q.push(`<b class="warn">CHECK</b> Validate the exact Supermicro SYS-222GS NIC population, host-optic qualification, and Cisco switch-side interoperability before final BOM.`);
+      if(!ncraRubin)q.push(`<b class="good">PASS</b> Rubin NVL8 networking profile: ConnectX-9 · one 800G-class OSFP host interface/GPU · ${be.logicalPerGpu}×${be.speed}G active Ethernet link${be.logicalPerGpu===1?'':'s'} · NVIDIA MMS4X00-NM-HGX host optic · SMF / 2×DR4 / 500 m.`);
+      if(!ncraRubin)q.push(`<b class="warn">CHECK</b> Validate the exact Supermicro SYS-222GS NIC population, host-optic qualification, and Cisco switch-side interoperability before final BOM.`);
       q.push(`<b class="good">PASS</b> Rubin NVL8 facilities model includes ${rubinRackPid?'rack-aggregated':'per-server'} power and weight: ${(serverPowerW/1000).toFixed(1)} kW and ${serverWeightKg.toFixed(0)} kg on the selected planning basis.`);
       q.push(`<b class="warn">CHECK</b> Power defaults to NVIDIA DGX Rubin NVL8 preliminary ~24 kW/server. Weight defaults to a 69.85 kg Supermicro 2U liquid-cooled HGX family proxy because an exact SYS222GS-R2BTALC1/2 Rubin weight was not found. Override the values when the exact Supermicro datasheet is available.`);
     }else{
@@ -3540,6 +3814,19 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
   }
 
   const layoutAudit=auditFabricLayout({be,fe:frontendEnabled?fe:null,vn:vastEnabled?vn:null,gbMgmt:platform==='gb300-nvl72'&&mgmtEnabled?gb300MgmtFabric:null,gbOob:platform==='gb300-nvl72'&&oobEnabled?gb300Oob:null,isGb:platform==='gb300-nvl72',frontendOver:feOver,dedicated,oob:oobEnabled?{capacityExceeded:oobSpineCapacityExceeded}:null});
+  if(ncraRubin){
+    layoutAudit.checks.push({domain:'Spectrum-6 physical and optical qualification',status:'REVIEW',message:`${pid} 102.4T whole-link geometry is planning only. Exact Spectrum-6/CX9 optics/cables, MGX liquid-cooling integration, Cisco/NVIDIA qualification, electrical power and installed weight remain TBD.`});
+    if(layoutAudit.status!=='FAIL')layoutAudit.status='REVIEW';
+    $('summary').innerHTML=`<b class="warn">NCRA Vera Rubin backend: ${pid} Spectrum-6 102.4T — qualification pending</b><br><b class="bad">Facility power and weight totals are incomplete: Spectrum-6 switch electrical power and installed weight are TBD.</b><br>`+$('summary').innerHTML;
+    $('facilityMetrics').innerHTML='<b class="bad">INCOMPLETE — Spectrum-6 switch electrical power and installed weight are TBD and excluded from totals.</b><br>'+$('facilityMetrics').innerHTML;
+    $('facilitySummary').innerHTML='<b class="bad">INCOMPLETE — Spectrum-6 switch electrical power and installed weight are TBD.</b><br>'+$('facilitySummary').innerHTML;
+  }else if(g300Selected){
+    layoutAudit.checks.push({domain:'G300 physical and optical qualification',status:'REVIEW',message:'102.4T whole-link geometry is planning only. Exact G300/CX9 optics/cables, Cisco/OEM qualification, electrical power and installed weight remain TBD.'});
+    if(layoutAudit.status!=='FAIL')layoutAudit.status='REVIEW';
+    $('summary').innerHTML='<b class="warn">G300 / Rubin engineering planning — not a validated RA</b><br><b class="bad">Facility power and weight totals are incomplete: G300 switch electrical power and installed weight are TBD.</b><br>'+$('summary').innerHTML;
+    $('facilityMetrics').innerHTML='<b class="bad">INCOMPLETE — G300 switch electrical power and installed weight are TBD and excluded from totals.</b><br>'+$('facilityMetrics').innerHTML;
+    $('facilitySummary').innerHTML='<b class="bad">INCOMPLETE — G300 switch electrical power and installed weight are TBD.</b><br>'+$('facilitySummary').innerHTML;
+  }
   const cloudRaAudit=cloudRaRequired?gb300CloudRaAudit({be,fe,mgmt,eq,frontendEnabled,mgmtEnabled,vastEnabled,oobEnabled,suIndependent:suFabric==='independent'&&suMode!=='off',pid,optic:backendOpticPid}):null;
   if(cloudRaAudit){
     layoutAudit.checks.push(...cloudRaAudit.checks);
@@ -3547,8 +3834,18 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
     $('summary').innerHTML=`<b class="${cloudRaAudit.status==='FAIL'?'bad':'warn'}">Cisco Cloud RA required: ${cloudRaAudit.status}</b> — backend reserved for ${be.fabricRacks} racks; full-system deviations remain. See QA.<br>`+$('summary').innerHTML;
     BOM.forEach(row=>row.status=(row.status||'')+' | Cisco Cloud RA '+cloudRaAudit.status+' (see QA)');
   }
+  if(backendCooling.required&&!backendCooling.met){
+    layoutAudit.checks.push({domain:'Backend liquid cooling',status:'FAIL',message:backendCooling.message});
+    layoutAudit.status='FAIL';
+    $('summary').innerHTML='<b class="bad">Liquid-cooled backend requirement UNMET</b> — '+backendCooling.targetPid+' is a procurement target only. Calculated quantities and facilities still describe '+pid+'; do not order them as a qualified liquid-cooled design.<br>'+$('summary').innerHTML;
+    BOM.filter(row=>/^AI Backend/.test(row.cat)).forEach(row=>{
+      row.status=(row.status||'')+' | LIQUID COOLING REQUIREMENT UNMET';
+      row.basis=(row.basis||'')+' | Target '+backendCooling.targetPid+' / family '+backendCooling.familyPid+' not applied; quantity, optics, physical and cooling qualification required.';
+    });
+  }
   if($('gb300RaPolicyNote'))$('gb300RaPolicyNote').innerHTML=cloudRaRequired
     ? `<b class="${cloudRaAudit.status==='FAIL'?'bad':'warn'}">Cisco Cloud RA ${cloudRaAudit.status}</b> — backend follows RA building blocks with an explicit core reservation. Full RA compliance is not established: review frontend, OOB, management and storage deviations in QA. <a href="${be.raSource}" target="_blank" rel="noopener">Cisco Cloud RA source</a>`
+    : cloudRaSelected&&ncraQuad?'<b class="warn">NCRA requirements option sets the GB300 fabric.</b> Cisco Cloud RA backend anchors and audit are not applied while NCRA is selected; the scalability panel still shows the Cisco Cloud RA two-tier boundary for comparison.'
     : 'Engineering mode retains configurable topology and bandwidth targets. Select Cisco Cloud RA required to enforce backend anchors and audit full-system deviations.';
   const storageTargetPb=vastEnabled&&$('vastMode').value==='target'?Math.max(.1,+$('targetPb').value||1):null;
   const storageTargetMet=storageTargetPb===null?null:vc.usablePb>=storageTargetPb;
@@ -3645,6 +3942,14 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
       computeAto:computeCcw?computeAto:''
     },
     backend:{
+      g300Planning:g300Selected,
+      ncraSwitchOverride:ncraRubin,
+      switchAsic:highRadix?highRadix.asic:null,
+      switchCapacityTbps:highRadix?102.4:51.2,
+      cageSpeedG:be.cageSpeedG||800,
+      twoTierGpuCeiling:be.twoTierGpuCeiling||null,
+      qualificationStatus:highRadix?'REVIEW':null,
+      coolingQualification:backendCooling,
       scalability:backendScalability,
       referenceArchitecture:be.gb300CloudRa?'Cisco GB300 Cloud RA':null,
       quantityAnchorVerified:be.quantityAnchorVerified===true,
@@ -3727,6 +4032,8 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
       childPid:mgmtEnabled?mgmtServerPid:'',
       roleSplit:mgmtEnabled?'3 × OpenShift control plane + 2 × BCM head nodes':'Disabled',
       oobEnabled:oobEnabled,
+      rackManagementPid:platform==='gb300-nvl72'?gb300Oob.inRackMgmtPid:null,
+      rackManagementSwitches:platform==='gb300-nvl72'?gb300Oob.inRackMgmtSwitches:0,
       oobLeaves:oobEnabled?(platform==='gb300-nvl72'?gb300Oob.inRackMgmtSwitches+gb300Oob.lowSpeedLeaves:oobLeaves):0,
       oobSpines:oobEnabled?(platform==='gb300-nvl72'?gb300Oob.oobSpines:oobSpines):0,
       uplinkSpeedG:100,
@@ -3771,7 +4078,7 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
 
 // SE thresholds are independent of sizing controls and are never fed into calc().
 function requirementFields(){
-  return ['customer','deal-id','target-nodes','server-model','max-rack-kw','max-facility-kw','max-weight-kg','target-storage-pib','max-racks','min-spare-pct','spare-scope'];
+  return ['customer','deal-id','target-nodes','server-model','max-rack-kw','max-facility-kw','max-weight-kg','target-storage-pib','max-racks','min-spare-pct','spare-scope','ncpra'];
 }
 function currentRequirements(){
   return {...Object.fromEntries(requirementFields().map(key=>[key,String($('req-'+key)?.value??'').trim()])), 'count-basis':requirementCountBasis()};
@@ -3806,10 +4113,12 @@ function validateSizingInputs(snapshot){
     inputs[id]=value;
   }
   // Older version-1 snapshots predate the optional Cloud RA policy controls.
-  for(const [id,value] of Object.entries({gb300RaPolicy:'engineering',gb300RaTargetRacks:'0'})){
+  for(const [id,value] of Object.entries({gb300RaPolicy:'engineering',gb300RaTargetRacks:'0',backendCoolingOption:'modeled'})){
     if(controls.has(id)&&!Object.hasOwn(inputs,id))inputs[id]=value;
   }
   if(!['engineering','cisco-cloud-ra'].includes(inputs.gb300RaPolicy))throw Error('Invalid GB300 RA policy.');
+  if(!['modeled','N9164F-NS6-ML','N9364F-SG3-RL'].includes(inputs.backendCoolingOption))throw Error('Invalid backend cooling option.');
+  if(inputs.backendSwitch==='N9364F-SG3-A'&&!['rubin-nvl72','rubin-hgx','rubin-nvl8-rack'].includes(inputs.platform))throw Error('G300 planning is available only for Vera Rubin profiles.');
   if(+inputs.gb300RaTargetRacks<0||!Number.isInteger(+inputs.gb300RaTargetRacks))throw Error('Invalid GB300 planned RA rack count.');
   for(const id of controls.keys())if(!Object.hasOwn(inputs,id))throw Error('Missing sizing input: '+id);
   for(const [id,value] of Object.entries(snapshot.features)){
@@ -3848,7 +4157,7 @@ function validateRequirementProfile(value){
   if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Invalid requirement profile.');
   // GPU-only profiles cannot be converted without a model-specific node density.
   if(!Object.hasOwn(value,'target-nodes')&&Object.hasOwn(value,'target-gpus'))value={...value,'target-nodes':'','server-model':''};
-  value={'min-spare-pct':'','spare-scope':'all',...value};
+  value={'min-spare-pct':'','spare-scope':'all','ncpra':'off',...value};
   const profile={};
   for(const key of requirementFields()){
     const raw=value[key];
@@ -3858,6 +4167,8 @@ function validateRequirementProfile(value){
       if(text.length>160)throw Error('Customer and Deal ID must be 160 characters or fewer.');
     }else if(key==='server-model'){
       if(!['','b300','h200','supermicro-b300','amd-mi355x','rubin-hgx','rubin-nvl8-rack','gb300-nvl72','rubin-nvl72','custom'].includes(text))throw Error('Unknown server model / platform.');
+    }else if(key==='ncpra'){
+      if(!['off','guide'].includes(text))throw Error('Unknown NCP-RA requirement policy.');
     }else if(key==='spare-scope'){
       if(!['','all','hardware','optics'].includes(text))throw Error('Unknown spare coverage scope.');
     }else if(text!==''&&(!/^(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text)||!Number.isFinite(Number(text))||Number(text)<0||(['target-nodes','max-racks'].includes(key)&&!Number.isInteger(Number(text))))){
@@ -3932,7 +4243,8 @@ function loadRequirementProfile(profileKey){
       const density=model==='rubin-nvl8-rack'?9:18;
       $('req-target-nodes').value=String(profile['count-basis']==='nodes'?Math.ceil(Number(profile['target-nodes'])/density):Number(profile['target-nodes'])*density);
     }
-    if(profile.sizing){syncCustomerName();calc();}else runComplianceAudit();
+    if(profile.sizing)syncCustomerName();
+    calc();
     requirementProfileMessage('Loaded '+profileKey+'. '+(profile.sizing?'Restored sizing inputs and recalculated.':'Legacy requirements-only profile; current sizing inputs retained.')+(profile['target-nodes']===''?' Set a server-node target if required; legacy GPU targets are not converted automatically.':''));
   }catch(e){
     if(previous){
@@ -3974,6 +4286,98 @@ async function handleFileImport(event){
     return true;
   }catch(e){requirementProfileMessage('Unable to import profiles: '+e.message,true);return false;}
   finally{input.value='';}
+}
+// NCRA guide sections 1, 3 and 5. Used only by the NCRA requirements option; never fed
+// back into sizing, facility totals or BOM quantities. Storage throughput (what the HPS
+// system must sustain) and converged-network targets (fabric bandwidth toward HPS and
+// compute) are separate guide values and are checked separately.
+const NCRA_PLATFORM_PROFILES={
+  'gb300-nvl72':{name:'GB300 NVL72',unit:'rack',gpusPerUnit:72,cpus:'36 × Grace',trays:'18 compute + 9 NVSwitch trays',nvlink:'5th Gen NVLink 1.8 TB/s per GPU',scaleOutPerGpuG:800,
+    nic:'72 × 800G ConnectX-8 SuperNIC (one per GPU)',dpu:'18 × BlueField-3',storage:null,network:{coreToHps:8.5,coreToCompute:11.1,cmx:null},
+    powerProfiles:[['MaxP',136]],edpKva:null,cooling:'Liquid-cooled rack',verified:true},
+  'rubin-nvl72':{name:'Vera Rubin NVL72',unit:'rack',gpusPerUnit:72,cpus:'36 × Vera',trays:'18 compute + 9 NVSwitch trays',nvlink:'6th Gen NVLink 3.6 TB/s per GPU (about 260 TB/s per rack)',scaleOutPerGpuG:1600,
+    nic:'144 × 800G ConnectX-9 SuperNIC (two per GPU, 1.6T/GPU)',dpu:'18 × BlueField-4 800G (one per compute tray)',storage:{read:1.5,write:0.75,heavy:4,networkMax:8},network:{coreToHps:16,coreToCompute:22.2,cmx:32},
+    powerProfiles:[['MaxLPS',156],['MaxQ',187],['MaxP',227]],edpKva:240,cooling:'Liquid-cooled rack',verified:true},
+  'rubin-hgx':{name:'HGX Rubin NVL8',unit:'server',gpusPerUnit:8,cpus:'2 × Vera',trays:null,nvlink:'6th Gen NVLink 3.6 TB/s per GPU',scaleOutPerGpuG:1600,
+    nic:'1.6T/GPU ConnectX-9 class (NVL8 network topology not yet in the guide)',dpu:null,storage:{read:1.5,write:0.75,heavy:4,networkMax:8},network:null,
+    powerProfiles:[['Guide estimate',15]],edpKva:null,cooling:'Air or liquid',verified:false}
+};
+NCRA_PLATFORM_PROFILES['b300']={name:'HGX B300',unit:'node',gpusPerUnit:8,cpus:'2 × x86 CPUs',trays:null,nvlink:'5th Gen NVLink 1.8 TB/s per GPU',scaleOutPerGpuG:800,
+  nic:'8 × 800G ConnectX-8 SuperNIC (one per GPU)',dpu:'1 × BlueField-3 2 × 400G per node',storage:{read:1.33,write:0.67,heavy:4,networkMax:8},network:{coreToHps:8.5,coreToCompute:8,cmx:null},
+  powerProfiles:null,edpKva:null,cooling:'Air-cooled (about 4 nodes/rack) or liquid-cooled (about 8 nodes/rack)',verified:true};
+NCRA_PLATFORM_PROFILES['supermicro-b300']={...NCRA_PLATFORM_PROFILES['b300'],name:'HGX B300 (Supermicro)'};
+NCRA_PLATFORM_PROFILES['rubin-nvl8-rack']={...NCRA_PLATFORM_PROFILES['rubin-hgx'],name:'HGX Rubin NVL8 full rack (9 servers)',unit:'rack',gpusPerUnit:72,powerProfiles:[['Guide estimate',135]]};
+// Checkpoint write rule: 14 bytes/parameter; write time is 1% (synchronous) or 10%
+// (asynchronous) of a one-hour checkpoint interval.
+const NCRA_CHECKPOINT={bytesPerParam:14,intervalS:3600,syncPct:1,asyncPct:10};
+function ncraCheckpointMaxParamsB(writeGBps,pct){return writeGBps*NCRA_CHECKPOINT.intervalS*pct/100/NCRA_CHECKPOINT.bytesPerParam;}
+// Client-facing line rate per EBox: 2 × 200G external, as drawn in the storage topology.
+const NCRA_EBOX_CLIENT_GBPS=400;
+function ncraHpsAssessment(gpus,eboxes,profile){
+  const n=Number.isFinite(gpus)&&gpus>0?gpus:0,s=profile?.storage||null,net=profile?.network||null;
+  const lineRateGbps=(eboxes||0)*NCRA_EBOX_CLIENT_GBPS;
+  const target=(kind,gbps)=>({kind,gbpsPerGpu:gbps,aggregateGbps:n*gbps,aggregateGBps:n?n*gbps/8:null,eboxesForLineRate:Math.ceil(n*gbps/NCRA_EBOX_CLIENT_GBPS)});
+  const targets=s?[target('read',s.read),target('write',s.write),target('heavy',s.heavy)]:[];
+  return {targets,eboxes:eboxes||0,lineRateGbps,perGpuLineRateGbps:n?lineRateGbps/n:null,
+    networkCeilingGbpsPerGpu:s?.networkMax??null,coreToHps:net?.coreToHps?{gbpsPerGpu:net.coreToHps,aggregateGbps:n*net.coreToHps}:null,
+    checkpoint:lineRateGbps?{syncMaxParamsB:ncraCheckpointMaxParamsB(lineRateGbps/8,NCRA_CHECKPOINT.syncPct),asyncMaxParamsB:ncraCheckpointMaxParamsB(lineRateGbps/8,NCRA_CHECKPOINT.asyncPct)}:null,
+    lineRateShortfall:!!s&&lineRateGbps>0&&lineRateGbps<n*s.read};
+}
+// The local NCRA guide is the requirements intake, not evidence of vendor certification.
+function ncpraRequirementsAudit(d,policy){
+  const source='docs/NCRA Design Requirements Guide (.md) for AI Fabric Sizer';
+  if(policy!=='guide')return {policy:'off',status:'NOT REQUESTED',source,checks:[]};
+  const b=d?.backend,p=b?.portConsumption;
+  const checks=[],add=(id,title,status,evidence)=>checks.push({id,title,status,evidence});
+  const profile=NCRA_PLATFORM_PROFILES[d?.compute?.modelKey]||null,units=d?.compute?.units||0;
+  if(profile){
+    const perGpu=b?.aggregatePerGpu,below=Number.isFinite(perGpu)&&perGpu<profile.scaleOutPerGpuG;
+    add(0,'Platform hardware profile','REVIEW',`Guide ${profile.name}: ${profile.gpusPerUnit} GPUs/${profile.unit} · ${profile.cpus}${profile.trays?' · '+profile.trays:''} · ${profile.nvlink} · ${profile.nic}${profile.dpu?' · '+profile.dpu:''}. Modeled scale-out: ${Number.isFinite(perGpu)?perGpu+'G/GPU':'TBD'}${below?` — BELOW the guide ${profile.scaleOutPerGpuG}G/GPU; confirm the exact NIC population and mode before applying the guide profile`:Number.isFinite(perGpu)?` matches the guide ${profile.scaleOutPerGpuG}G/GPU`:''}. Backend switch: ${b?.switchPid||'TBD'} (${d?.backend?.switchCapacityTbps||'TBD'}T${b?.ncraSwitchOverride?', placed by the NCRA option':''}). ${profile.verified?'Hardware values are from the NCRA guide and require OEM confirmation.':'This profile is not yet verified in the NCRA guide; treat values as planning estimates.'}`);
+  }
+  const leaves=p?.leaves||[];
+  const shortfall=leaves.some(r=>r.upCages*p.cageSpeedG<r.hostLinks*p.hostLinkSpeedG);
+  add(1,'Compute 1:1 bandwidth',shortfall?'FAIL':'REVIEW',shortfall?'Modeled leaf uplink bandwidth is below attached host bandwidth.':p?.verified?'Modeled port map fits and leaf uplinks cover host demand; end-to-end non-blocking behavior and the applicable RA still require validation.':'Complete whole-link mapping and end-to-end bandwidth require validation.');
+  add(2,'Symmetric GPU rails',b?.topology==='Classic'?'FAIL':'REVIEW',b?.railMappingVerified?'Modeled rail distribution is symmetric; verify NIC-index wiring against the applicable platform RA.':'Verify GPU/NIC-index-to-rail wiring; a topology label does not establish symmetric alignment.');
+  const gpus=d?.solution?.totalGpus,vast=d?.storage?.enabled!==false;
+  const hps=ncraHpsAssessment(gpus,vast?d?.storage?.eboxes:0,profile),hpsTargets=hps.targets;
+  const agg=t=>t.gbpsPerGpu+' Gbps/GPU = '+(t.aggregateGBps===null?'TBD':t.aggregateGBps.toFixed(1))+' GB/s';
+  let hpsEvidence='Select the platform-specific HPS throughput guidance and obtain measured storage read/write throughput. Storage capacity alone is insufficient.';
+  if(profile){
+    const [read,write,heavy]=hpsTargets,parts=[];
+    if(read)parts.push(`Standard HPS throughput: read ${agg(read)}, write ${agg(write)}; heavy model-loading/KV-cache profiles about ${agg(heavy)} (workload-specific). The converged network sustains up to ${hps.networkCeilingGbpsPerGpu} Gbps/GPU; HPS is sized to throughput guidance, not to the maximum network bandwidth.`);
+    else parts.push('HPS storage throughput guidance for this platform is not in the NCRA guide; obtain certified HPS partner sizing.');
+    if(hps.coreToHps)parts.push(`Converged-network core-to-HPS target: ${hps.coreToHps.gbpsPerGpu} Gbps/GPU = ${(hps.coreToHps.aggregateGbps/1000).toFixed(1)} Tbps fabric bandwidth (network requirement, not storage throughput).`);
+    if(!vast)parts.push('VAST is disabled, so no HPS tier is modeled; size the external durable HPS tier to this guidance.');
+    else{
+      parts.push(`Modeled VAST client line rate: ${hps.eboxes} EBoxes × ${NCRA_EBOX_CLIENT_GBPS}G = ${(hps.lineRateGbps/1000).toFixed(1)} Tbps (${hps.perGpuLineRateGbps===null?'TBD':hps.perGpuLineRateGbps.toFixed(2)} Gbps/GPU)${hps.lineRateShortfall?` — line rate alone is below the ${read.gbpsPerGpu} Gbps/GPU standard read guidance`:''}.`);
+      if(read)parts.push(`Line-rate EBox floor: ${read.eboxesForLineRate} @ standard read, ${heavy.eboxesForLineRate} @ heavy profile.`);
+      if(hps.checkpoint)parts.push(`Checkpoint ceiling at line rate (${NCRA_CHECKPOINT.bytesPerParam} B/parameter, 1-hour interval): about ${Math.floor(hps.checkpoint.syncMaxParamsB).toLocaleString()}B parameters synchronous (${NCRA_CHECKPOINT.syncPct}% write time) or ${Math.floor(hps.checkpoint.asyncMaxParamsB).toLocaleString()}B asynchronous (${NCRA_CHECKPOINT.asyncPct}%).`);
+    }
+    parts.push('Confirm the workload target and measured read/write throughput; port line rate is a ceiling, not sustained performance.');
+    hpsEvidence=parts.join(' ');
+  }
+  add(3,'HPS sustained throughput',hps.lineRateShortfall?'FAIL':'REVIEW',hpsEvidence);
+  add(4,'Compute / frontend separation',d?.frontend?.enabled===false?'FAIL':'REVIEW','Verify separate compute and frontend paths and tenant isolation. East-West plane count is not proof of East-West / North-South separation.');
+  add(5,'Lossless RoCE configuration','REVIEW','Validate lossless RoCE on the GPU fabric: PFC with PFC watchdog on GPU-facing ports, lossless/lossy buffer allocation (guide: about 90% / 10%), DSCP-to-priority mapping preserved across VXLAN encapsulation/decapsulation, ECN and adaptive routing, end-to-end MTU and switch/NIC firmware. Exact priority, threshold and MTU values come from the platform configuration, not the guide.');
+  add(6,'Dedicated OOB coverage',d?.management?.oobEnabled===false?'FAIL':'REVIEW','Verify BMC, switch, CDU and PDU coverage and isolation. Low-speed endpoint links and 100GbE rack uplinks are distinct; uplinks do not violate a 1G/10G endpoint requirement.');
+  add(7,'PXN for collapsed rails','REVIEW','Confirm topology applicability and NCCL/workload support. The reference fabrics are rail-optimized multi-plane designs; a collapsed rails-only fabric is outside the guide and needs version-specific NCCL PXN validation, not a universal flag prescription.');
+  let facilityGuide=null,powerEvidence='Validate OEM electrical demand, supply voltage, liquid heat capture, facility water conditions and CDU redundancy. Guide rack power profiles are planning inputs and do not override product data.';
+  if(profile&&units>0&&!profile.powerProfiles){
+    facilityGuide={unit:profile.unit,powerProfiles:null,cooling:profile.cooling,verified:profile.verified};
+    powerEvidence=`Guide ${profile.name}: power per ${profile.unit} is not specified in the guide; product data governs · ${profile.cooling}. Facility water temperature, CDU redundancy and PUE are not specified; validate with the facility design.`;
+  }else if(profile&&units>0){
+    const modeledUnitKw=d.compute.baseMaximumPowerKw>0?d.compute.baseMaximumPowerKw/units:null;
+    const kws=profile.powerProfiles.map(p=>p[1]),lo=Math.min(...kws),hi=Math.max(...kws);
+    facilityGuide={unit:profile.unit,powerProfiles:profile.powerProfiles,edpKva:profile.edpKva,unitKw:[lo,hi],clusterKw:[lo*units,hi*units],modeledUnitKw,
+      withinGuide:modeledUnitKw===null?null:modeledUnitKw>=lo&&modeledUnitKw<=hi,cooling:profile.cooling,verified:profile.verified};
+    powerEvidence=`Guide ${profile.name} power per ${profile.unit}: ${profile.powerProfiles.map(([n,kw])=>n+' '+kw+' kW').join(' · ')}${profile.edpKva?` · MaxP electrical design point ${profile.edpKva} kVA`:''} · ${profile.cooling}${profile.verified?'':' (not yet verified in the guide)'}. `+
+      `Guide-range compute estimate for ${units} ${profile.unit}${units===1?'':'s'}: ${lo===hi?(lo*units).toLocaleString():facilityGuide.clusterKw.map(v=>v.toLocaleString()).join('–')} kW (rack TDP, before the sizer's peak headroom). `+
+      (modeledUnitKw===null?'Modeled compute power is TBD; this guide estimate is shown for review only and is not added to facility totals. ':
+        `Modeled base: ${modeledUnitKw.toFixed(1)} kW/${profile.unit}${facilityGuide.withinGuide?' (within guide range)':' (outside guide range; product data governs)'}. `)+
+      'Facility water temperature, CDU redundancy and PUE are not specified in the guide; validate with the facility design.';
+  }
+  add(8,'Power and cooling',d?.facility?.racks?.some(r=>r.coolingExceeded)?'FAIL':'REVIEW',powerEvidence);
+  return {policy,status:checks.some(c=>c.status==='FAIL')?'FAIL':'REVIEW',source,platformProfile:profile,hps,hpsTargets,facilityGuide,checks,qualification:'Requirements review only; NVIDIA NCP-RA / Cisco qualification is not established. Placing N9164F-NS6-ML for Vera Rubin, or selecting G300, does not establish Spectrum-X RA validation or NCP-RA approval.'};
 }
 function runComplianceAudit(){
   const body=$('compliance-matrix-rows'),badge=$('compliance-overall-badge');
@@ -4017,7 +4421,14 @@ function runComplianceAudit(){
   const modelOptions=$('req-server-model')?.options||[];
   const requiredModel=Array.from(modelOptions).find(o=>o.value===req['server-model'])?.textContent||req['server-model'];
   rows.push({label:'Server Model / Platform',key:'server-model',actual:d?.compute?.platform||'TBD',requirement:requiredModel,status:!req['server-model']?'NOT REQUESTED':!d?.compute?.modelKey?'REVIEW':d.compute.modelKey===req['server-model']?'PASS':'EXCEEDED',model:true});
+  const ncpra=ncpraRequirementsAudit(d,req.ncpra);
+  if(d)d.ncpraRequirements=ncpra;
+  const ncpraPanel=$('ncpra-review');
+  if(ncpraPanel)ncpraPanel.innerHTML=ncpra.policy==='off'?'':`<p><b>NCP-RA ${ncpra.status}</b> — ${phaseEscape(ncpra.qualification)} <a href="${encodeURI(ncpra.source)}" target="_blank" rel="noopener">NCRA requirements guide (local copy, not in Git)</a></p><p>The guide is a synthesized checklist; cited source revisions and applicability need confirmation. Cisco Cloud RA quantity anchors remain separate.</p><ol>${ncpra.checks.map(c=>`<li><b>${phaseEscape(c.title)} — ${c.status}</b>: ${phaseEscape(c.evidence)}</li>`).join('')}</ol>`;
+  if(ncpra.policy==='guide')rows.push({label:'NCP-RA requirements',key:'ncpra',model:true,requirement:'NCRA guide: '+ncpra.checks.length+' checks',actual:ncpra.status+' — qualification pending',status:ncpra.status==='FAIL'?'EXCEEDED':'REVIEW'});
   const format=(value,unit)=>value.toLocaleString(undefined,{maximumFractionDigits:unit==='PiB'?4:2})+' '+unit;
+  if(d?.backend?.coolingQualification?.required&&!d.backend.coolingQualification.met)rows.push({label:'Liquid-cooled backend',key:'backend-liquid-cooling',model:true,
+    requirement:d.backend.coolingQualification.targetPid+' qualified design',actual:'UNMET — '+d.backend.switchPid+' remains the modeled switch',status:'EXCEEDED'});
   if(d?.referenceArchitecture?.policy==='cisco-cloud-ra')rows.push({label:'Cisco Cloud RA requirement',key:'cisco-cloud-ra',model:true,
     requirement:'Cisco GB300 Cloud RA',actual:d.referenceArchitecture.audit?.status||'REVIEW',
     status:d.referenceArchitecture.audit?.status==='FAIL'?'EXCEEDED':'REVIEW'});
@@ -4158,7 +4569,9 @@ function pptAddHeader(slide,title,subtitle=''){
 }
 function pptAddFooter(slide,d){
   const ra=d.referenceArchitecture?.policy==='cisco-cloud-ra'?`  |  Cisco Cloud RA ${d.referenceArchitecture.audit?.status||'REVIEW'}`:'';
-  slide.addText(`${d.customer}  |  Cisco Secure AI Factory Sizer${ra}  |  ${d.generatedAt}`,{x:.55,y:7.12,w:8.9,h:.18,fontFace:'Aptos',fontSize:7.5,color:'68839D',margin:0,align:'right'});
+  const liquid=d.backend?.coolingQualification?.required&&!d.backend.coolingQualification.met?'  |  Liquid-cooled backend UNMET':'';
+  const g300=d.backend?.g300Planning?'  |  G300 planning / physical data TBD':d.backend?.ncraSwitchOverride?'  |  NCRA Spectrum-6 backend / physical data TBD':'';
+  slide.addText(`${d.customer}  |  Cisco Secure AI Factory Sizer${ra}${liquid}${g300}  |  ${d.generatedAt}`,{x:.55,y:7.12,w:8.9,h:.18,fontFace:'Aptos',fontSize:7.5,color:'68839D',margin:0,align:'right'});
 }
 function pptCard(slide,x,y,w,h,title,value,sub=''){
   slide.addShape(PPTX_SHAPE.roundRect,{x,y,w,h,fill:{color:'10253A'},line:{color:'244763',width:1}});

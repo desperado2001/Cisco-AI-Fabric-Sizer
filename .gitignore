@@ -1,0 +1,10 @@
+# Vendor source documents (NVIDIA NCP-RA / NVCS / Spectrum design guides, etc.)
+# are kept locally for reference only and must not be committed or pushed.
+docs/nvidia-source/*
+!docs/nvidia-source/README.md
+
+# NCRA requirements guide: derived from the sensitive sources above; local only.
+docs/NCRA Design Requirements Guide*
+
+# Safety net: no PDFs anywhere in the repository.
+*.pdf

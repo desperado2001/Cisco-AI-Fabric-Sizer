@@ -757,3 +757,90 @@ For the engineered compact GB300 two-tier model on 64-cage 800G switches, each s
 For 104 deployed racks, the current 120 leaves and 64 spines per plane can accommodate `floor(30 leaves/rail × 64 host links/leaf / 18 links/rack/rail) = 106 racks`. This is two spare rack slots with the current switch inventory, not nine. Reaching the 113-rack topology ceiling requires additional leaves and links and may require recabling. The Cisco Cloud RA two-tier boundary remains 64 racks / 4,608 GPUs and is shown separately; planned RA growth beyond that boundary requires three tiers from day one.
 
 At 104 racks in RA-required mode, installed leaf/spine inventory supports 112 racks (eight spare rack slots), with a separate 128-rack superspine core reservation. The implemented RA model covers up to 1024 racks; the panel states that growth requires additional SU-groups/core inventory and that the modeled SU-group arrangement changes above 512 racks. The engineering derived three-tier model remains bounded at 128 racks. Designs beyond a model limit show EXCEEDED and do not advertise verified installed headroom.
+
+## N9164 liquid-cooled procurement reference
+
+GB300 in-rack management uses **N93108TC-FX3-MGX**, two switches per deployed rack, in the BOM, management state, summary and topology. Cisco lists this exact PID on its [93108TC-FX3 product page](https://www.cisco.com/c/en/us/support/switches/nexus-93108tc-fx3-switch/model.html). Shared external low-speed leaves and optional STP aggregation retain their separate generic FX3 PIDs. Existing rack-uplink quantities are unchanged; exact MGX optics/software and rack wiring remain qualification items. These in-rack devices remain inside the fixed compute-rack facility planning boundary rather than adding separate external FX3 chassis power or rack space.
+
+The backend controls now include an optional liquid-cooled N9164 requirement with the specific target **N9164F-NS6-ML**, and identify **N9164F-NS6** as the family designation. Cisco's October 5, 2026 [ORv3/MGX announcement](https://blogs.cisco.com/datacenter/powering-ai-ready-data-centers-with-n9000-support-for-orv3) names N9164F-NS6-ML as the liquid-cooled platform for NVIDIA MGX accelerated-computing racks. The [N9100 FAQ](https://www.cisco.com/c/en/us/products/collateral/switches/nexus-9000-series-switches/n9164e-ns4-o-switch-faq.html) describes the Spectrum-6 family as 102.4 Tbps / 64 × 1.6T OSFP with liquid cooling. The exact ML model's complete physical, cooling and ordering configuration remains unverified.
+
+The existing **N9164E-NS4-O** remains the modeled 51.2T / 64 × 800G air-cooled platform. Its [installation guide](https://www.cisco.com/c/en/us/td/docs/switches/datacenter/nexus9000/hw/n9164E-NS4-O/cisco-n9164e-ns4-o-hardware-installation-guide/install-chassis/determine-chassis-direction-for-airflow.html) specifies port-side intake airflow and fan/power-supply airflow matching. No NS4 liquid retrofit kit PID was verified. Do not interpret the NS6 ML chassis as an NS4 cooling accessory or a one-for-one replacement using the existing 800G radix and transceiver quantities.
+
+Selecting the liquid target records an unmet requirement rather than silently substituting the chassis. `backend.coolingQualification` captures the target, modeled PID, sources and qualification status. Summary, QA, layout audit, SE scorecard, backend BOM statuses/bases and PowerPoint footers identify the unmet requirement. Current switch quantities and facility totals still describe the selected modeled platform; no NS6 switch purchase quantities or unverified liquid accessories are added. Older saved sizing profiles default to no liquid-switch requirement.
+
+Before implementing an active NS6 ML sizing profile, confirm exact CCW configuration/orderability, port modes and breakout interoperability, supported optics/cables, installed dimensions/weight, electrical consumption, MGX mounting/power connections, liquid/air heat split, coolant flow/temperature/pressure/chemistry, hoses, quick-disconnects, manifolds and CDU integration. Unknown NS6 physical/cooling values remain null. The model neither copies NS4 electrical/weight values nor sizes switch liquid cooling using the server CDU allowance.
+
+## Optional G300 backend for Vera Rubin
+
+Rubin NVL72, modular Rubin NVL8 and full-rack Rubin NVL8 can select **N9364F-SG3-A** as a G300 engineering profile. Existing switch selections remain the defaults. Cisco Live [BRKDCN-3939](https://www.ciscolive.com/c/dam/r/ciscolive/emea/docs/2026/pdf/BRKDCN-3939.pdf) identifies the air-cooled 3RU platform, 102.4T G300 ASIC, 64 × 1.6T OSFP cages, and 128 × 800G / 256 × 400G breakout capability. Cisco's [ORv3 announcement](https://blogs.cisco.com/datacenter/powering-ai-ready-data-centers-with-n9000-support-for-orv3) identifies **N9364F-SG3-RL** as the liquid-cooled ORv3 model. RL is recorded as a separate unmet liquid-cooled procurement target until its exact physical/cooling configuration is qualified; the active numerical profile describes the air-cooled A model.
+
+The G300 helper recomputes leaf/spine geometry with `switchCapacityGbps=102400`, `cageSpeedG=1600`, and `logical links/cage = 1600 / host-link speed`. It uses the existing Rubin host-NIC assumptions (NVL72 two independent 800G ports/GPU across two planes; NVL8 configured ConnectX-9 mode). Four NVL72 rails or eight NVL8 rails are conserved independently. Every accepted two-tier mesh uses whole logical peer links, rounded physical cages, at most 64 cages per switch, and uplink bandwidth at least equal to host bandwidth. A two-tier overflow is explicitly marked three-tier review; no qualified G300 superspine quantity is invented.
+
+Eight NVL72 racks give 576 GPUs / 1152 active 800G host links across two planes. The current solver produces 12 leaves + 5 spines per plane, or **24 leaves + 10 spines total**. A leaf has 48 host links in 24 cages and 50 logical 800G uplinks in 25 equivalent 1.6T cages. Each leaf/spine peer has 10 logical 800G links; each spine receives 12 × 10 / 2 = 60 physical cages. These are derived counts, not a published Rubin RA anchor. The selected NVL72 NIC/plane assumptions give an 8192-GPU two-tier port envelope (113 complete 72-GPU racks); 114 racks requires a separately qualified third tier. NVL8 limits depend on its selected NIC mode.
+
+The BOM uses the real switch PID and unresolved G300 switch-optic budgets. Inherited 800G DR8 switch-optic and MPO cable rows are replaced: a 1.6T cage count is not an 800G optic quantity or a verified physical fiber-assembly count. Cabling is one explicitly unresolved design lot with no spare uplift; assembly PIDs and quantities remain TBD. Host-optic entries retain their separate Rubin assumptions and require exact G300 interoperability validation.
+
+G300 electrical consumption and installed weight were not verified in primary model-specific sources. They are displayed as TBD, preserved as unknown physical rows, and excluded from partial power/weight totals rather than replaced with G200 values. The air model reserves its published 3RU footprint. Summary, facilities, layout audit, topology/port labels, QA, PowerPoint footer and saved design state identify the planning/unknown basis. This option does not establish NVIDIA NCP compliance, a validated Rubin Cloud RA, exact orderability, optical qualification, or liquid cooling integration.
+
+## NCRA guide: Vera Rubin requirements review
+
+The SE Requirements option **Review against NCRA guide** applies the NCRA guide's platform profiles for GB300 NVL72, Vera Rubin NVL72, HGX Rubin NVL8 and full-rack Rubin NVL8. NCRA changes the backend fabric only for Vera Rubin, GB300 NVL72 and B300. For other platforms (AMD MI355X, H200, custom) the option is read-only: sizing, BOM, power, weight and facility totals are identical whether it is on or off (regression-tested). Platforms without a guide profile keep the generic eight checks.
+
+The NCRA guide is kept locally and excluded from Git (`.gitignore`). The values the sizer uses are encoded in `NCRA_PLATFORM_PROFILES` and `ncraRubinOctalPlaneDesign`, so CI and other clones do not need the guide.
+
+### Vera Rubin backend under NCRA
+
+With the NCRA option selected, all Rubin platforms use **N9164F-NS6-ML** (Spectrum-6, 102.4T, 64 × 1.6T OSFP, liquid-cooled MGX) instead of the 51.2T N9164E-NS4-O default. The backend switch selector is locked while NCRA is on. Turning NCRA off restores the selected switch and the unchanged 51.2T results.
+
+**Vera Rubin NVL72: eight-plane fabric** (`ncraRubinOctalPlaneDesign`). Each GPU connects one 200G lane to each of eight planes (1.6T/GPU), across four rails. Each switch is treated as 512 × 200G.
+
+- Scalable unit: `SU = ceil(racks / 14)`.
+- Leaves: one per rail per plane per SU, so `leaves/plane = 4 × SU` and `total leaves = 32 × SU`. Each full-SU leaf carries `14 × 18 = 252` host lanes.
+- Spines are provisioned for the next power-of-two SU band `B = 2^ceil(log2 SU)`: `spines/plane = ceil(252 × 4B / 512)`. Growth inside a band adds only leaves.
+- Lanes per leaf/spine pair: `256 / spines` when that divides evenly and fits the 512-port spine at the band size. Otherwise `ceil(252 / spines)`. Uplinks per leaf = pair lanes × spines ≥ 252 (1:1).
+- Two-tier, no superspine, through 128 SUs (1,792 racks / 129,024 GPUs). Above that, the design is marked `3-tier review`.
+- Cabling: host-to-leaf 800G MPO = `144 × racks`; leaf-to-spine 800G = logical uplink lanes / 4. A tray-to-leaf lane shuffle is always required. A leaf-to-spine shuffle is required above 32 SUs.
+- Host optics: 72 1.6T OSFP per rack (two ConnectX-9 per cage, 2 × 800G MPO), `TBD-1600G-CX9-OCTAL-HOST`.
+
+| Racks | NCRA off (51.2T NS4, 2 planes) | NCRA on (NS6-ML, 8 planes) |
+| --- | --- | --- |
+| 14 | — | 32 leaves + 16 spines |
+| 56 | 256 + 126, three-tier review (two-tier ends at 28 racks) | 128 + 64 |
+| 114 | 520 + 258, three-tier review | 288 + 256, two-tier |
+| 448 | — | 1,024 + 504, two-tier, leaf-spine shuffle not yet required |
+
+**HGX Rubin NVL8 (modular and full rack)** keeps a two-plane 2 × 800G/GPU attachment on the same 102.4T whole-link solver used for G300 (`rubinG300BackendDesign(seed, pid)`), with host optics `TBD-800G-CX9-NCRA-HOST`. The NVL8 network topology is not yet in the guide.
+
+For both, the BOM uses N9164F-NS6-ML leaves and spines, `TBD-1600G-NS6-SWITCH` switch-optic budgets and one `TBD-NS6-CABLING` design lot, replacing inherited 800G DR8 optics and MPO cables. NS6-ML electrical power, installed weight and coolant data are unknown. They are kept as TBD physical rows, so facility totals show INCOMPLETE; 2RU is a rack-space placeholder only. The layout audit adds a Spectrum-6 qualification REVIEW. If the N9164F-NS6-ML liquid-cooled requirement is also selected, it is recorded as met (REVIEW) rather than UNMET. This placement does not establish Spectrum-X RA validation or NCP-RA approval.
+
+### GB300 NVL72 and HGX B300 backend under NCRA
+
+With the NCRA option selected, GB300 NVL72, Cisco UCS B300 and Supermicro B300 use a quad-plane compute fabric (`ncraQuadPlaneDesign`) on **N9164E-NS4-O** (Spectrum-4, 51.2T) in 256 × 200G mode. The backend switch and B300 mode selectors are locked while NCRA is on. For GB300, NCRA sets the fabric even when **Cisco Cloud RA required** is selected: the Cloud RA anchors and audit are not applied, the policy note says so, and the scalability panel still shows the 64-rack Cisco Cloud RA two-tier boundary for comparison. Turning NCRA off restores the previous selections and results.
+
+- Each GPU connects one 200G lane to each of four planes (800G/GPU). Each plane has one leaf per rail group per SU:
+  - **GB300:** 7-rack SU, 4 rails, 126 host lanes per full leaf.
+  - **B300:** 64-node SU, 8 rails in 4 rail groups, 128 host lanes per full leaf.
+- **Two-tier, up to 64 SUs** (GB300 448 racks / 32,256 GPUs; B300 4,096 nodes / 32,768 GPUs).
+  - Spines per plane are the smallest count that splits the leaf uplink lanes (126 or 128 for GB300, 128 for B300) into whole 400G ports, or single lanes, per leaf/spine pair.
+  - Each spine must fit `lanes per pair × leaves per plane ≤ 256`.
+  - A leaf-to-spine shuffle is flagged when a pair has two lanes or fewer.
+- **Three-tier, 65 to 256 SUs:** 8-SU rail groups. Per plane: `4 × SU` leaves, `32 × groups` spines and `16 × groups` superspines. Each leaf has 128 uplink lanes, 16 to each of the group's 8 spines. Each spine has 128 lanes down and 128 up. Each superspine uses all 64 cages.
+- **BOM:**
+  - Host optics: one per GPU.
+  - Switch-side 800G DR8 optics: rounded per leaf.
+  - MPO-12 cables: host-to-shuffle = `GPUs × 2`; leaf-to-spine and spine-to-superspine = 800G links × 2.
+  - One `TBD-QUAD-PLANE-SHUFFLE` design lot.
+- **Equivalence:** B300 counts are identical to the existing Cisco ConnectX-8 dual-plane design up to 1,024 nodes. Above that, NCRA stays two-tier without superspines to 4,096 nodes; for example, 2,048 nodes = 512 leaves + 256 spines. For GB300, small clusters need more switches than the dual-plane design, because there are four planes instead of two. At 70 racks the fabric is 160 leaves + 84 spines, two-tier.
+
+The NCRA audit adds a B300 profile:
+- **Hardware:** ConnectX-8 800G/GPU and BlueField-3 2 × 400G per node.
+- **Storage:** 1.33 read / 0.67 write Gbps/GPU, heavy profile about 4.
+- **Network:** 8.5 Gbps/GPU core-to-HPS and 8 core-to-SU-group.
+- **Power:** not specified, so the product data governs.
+
+### NCRA audit checks
+
+- **Check 0, platform hardware profile:** shows the guide profile and compares it with the modeled `aggregatePerGpu`. Vera Rubin NVL72 and NCRA NVL8 both model 1600G/GPU. The check names the placed backend switch. NVL8 is flagged as not yet verified in the guide.
+- **Check 3, HPS:** storage throughput and network bandwidth are separate. The standard throughput aggregate is `GPUs × per-GPU guidance`; Rubin is 1.5 Gbps read / 0.75 Gbps write, with a heavy profile of about 4 Gbps. The converged-network core-to-HPS target is reported separately: Rubin NVL72 16 Gbps/GPU, GB300 8.5. VAST client line rate = `EBoxes × 400G`. If it falls below the standard read aggregate, the check is a **FAIL**. Otherwise it is REVIEW, pending measured throughput. Checkpoint ceiling at line rate: `max parameters = (line rate GB/s × 3,600 s × write %) / 14 B`, with 1% synchronous and 10% asynchronous. GB300 has no storage throughput figure in the guide, so it reports only the network target.
+- **Check 5, lossless RoCE:** PFC watchdog on GPU-facing ports, a lossless/lossy buffer split, and DSCP preserved across VXLAN. Exact values come from the platform configuration.
+- **Check 8, power and cooling:** reports the guide rack power profiles (Rubin NVL72 MaxLPS 156 / MaxQ 187 / MaxP 227 kW, 240 kVA MaxP design point; GB300 MaxP 136 kW) and a cluster estimate. That estimate is never added to facility totals. Facility water, CDU redundancy and PUE are not specified in the guide. Rubin NVL72 modeled power remains TBD.

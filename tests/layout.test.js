@@ -194,9 +194,9 @@ test('odd dual-plane AMD NIC counts size the busier per-server plane, not half t
 });
 
 test('Rubin NVL8 full racks use the same networking as nine eight-GPU servers per rack',()=>{
-  const definition=html.match(/const makeBackend=n=>[^;]+;/)[0];
+  const definition=html.match(/const makeBackend=n=>\{[\s\S]*?\n  \};/)[0];
   const p={nicProfile:'cx9-rubin',portMode:'sp_dp',hostInterfaceSpeed:800,linkSpeed:400,linksPerGpu:2,physicalPortsPerGpu:1};
-  const make=new Function('backendDesign','platform','rubinRackPid','mode','top','customGpusPerNode','customBackendProfile',definition+'return makeBackend;')(api.backendDesign,'rubin-hgx',true,'custom','rail',72,p);
+  const make=new Function('backendDesign','platform','rubinRackPid','mode','top','customGpusPerNode','customBackendProfile','highRadix','pid','ncraRubin','ncraQuad',definition+'return makeBackend;')(api.backendDesign,'rubin-hgx',true,'custom','rail',72,p,null,'N9164E-NS4-O',false,false);
   for(const racks of [1,2,16,32,70]){
     const rackDesign=make(racks), serverDesign=api.backendDesign(racks*9,'custom','rail',8,p);
     assert.deepEqual(rackDesign,serverDesign);
