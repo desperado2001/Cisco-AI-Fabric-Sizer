@@ -217,7 +217,7 @@ test('optical OOB uses 100G DR optics and duplex LC SMF for both leaf and core p
   assert.equal(api.genericOobPlan(600).uplinkSpeedG,100);
   assert.deepEqual(api.genericOobPlan(600,'spine40g'),api.genericOobPlan(600,'spine100g'));
   assert.match(html,/<option value="spine100g" selected>100G spine fabric/);
-  const begin=html.indexOf("      if(gb300Oob.selectedMode==='spine'){\n        add('GB300 Low-Speed OOB Optics'");
+  const begin=html.search(/      if\(gb300Oob\.selectedMode==='spine'\)\{\r?\n        add\('GB300 Low-Speed OOB Optics'/);
   const end=html.indexOf("      if(gb300Oob.selectedMode!=='spine')",begin);
   assert.ok(begin>0&&end>begin);
   const rows=[];

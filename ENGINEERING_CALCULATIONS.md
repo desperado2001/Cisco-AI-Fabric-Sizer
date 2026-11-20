@@ -844,3 +844,31 @@ The NCRA audit adds a B300 profile:
 - **Check 3, HPS:** storage throughput and network bandwidth are separate. The standard throughput aggregate is `GPUs × per-GPU guidance`; Rubin is 1.5 Gbps read / 0.75 Gbps write, with a heavy profile of about 4 Gbps. The converged-network core-to-HPS target is reported separately: Rubin NVL72 16 Gbps/GPU, GB300 8.5. VAST client line rate = `EBoxes × 400G`. If it falls below the standard read aggregate, the check is a **FAIL**. Otherwise it is REVIEW, pending measured throughput. Checkpoint ceiling at line rate: `max parameters = (line rate GB/s × 3,600 s × write %) / 14 B`, with 1% synchronous and 10% asynchronous. GB300 has no storage throughput figure in the guide, so it reports only the network target.
 - **Check 5, lossless RoCE:** PFC watchdog on GPU-facing ports, a lossless/lossy buffer split, and DSCP preserved across VXLAN. Exact values come from the platform configuration.
 - **Check 8, power and cooling:** reports the guide rack power profiles (Rubin NVL72 MaxLPS 156 / MaxQ 187 / MaxP 227 kW, 240 kVA MaxP design point; GB300 MaxP 136 kW) and a cluster estimate. That estimate is never added to facility totals. Facility water, CDU redundancy and PUE are not specified in the guide. Rubin NVL72 modeled power remains TBD.
+
+## Vera Rubin initial-plan status - 2026-11-20
+
+All Vera Rubin outputs (Vera Rubin NVL72, Rubin NVL8 single server and Rubin NVL8 full rack) are an **initial planning baseline that may change**. Platform specifications, ConnectX-9 NIC configuration, backend switch qualification (Spectrum-6 / G300), optics, cabling, power and weight are not final. No sizing math changed; the status is shown in these places:
+
+- **Inputs:** an amber "INITIAL PLAN - SUBJECT TO CHANGE" notice under the platform selector whenever a Rubin platform is selected.
+- **Validation results:** the first QA line.
+- **Design state:** `DESIGN_STATE.planStatus = {initialPlan, label, notice}`. It is captured with project phases and deal profiles.
+- **Presentation:** a notice box on the title slide, an "Initial plan - subject to change" tag in every slide footer, and the first item on the Validation & Design Notes slide.
+- **Engineering CSV:** a leading `Plan Status` row. Non-Rubin CSVs are unchanged.
+- **CCW XLSX:** the Notes column of each line starts with the plan status, including phase exports. The upload column layout is unchanged.
+
+Tests in `tests/rubin-plan.test.js` cover all three Rubin platforms, the non-Rubin platforms, switching away from Rubin, and the CSV header.
+
+### Vera Rubin requires 102.4T backend switching
+
+Rubin platforms offer only 102.4T backend switches: **N9164F-NS6-ML** (Spectrum-6, liquid cooled) is the default and **N9364F-SG3-A** (G300, air cooled) is the alternative. The 51.2T switches are disabled for Rubin and a 51.2T value restored from an older saved profile is moved to N9164F-NS6-ML. Non-Rubin platforms cannot select either 102.4T switch.
+
+Two-tier limits follow `host links per plane = N² / 2`, where `N = 102.4T / link speed`:
+
+| Rubin option | Link per plane | N | Two-tier up to | Superspines from |
+| --- | --- | --- | --- | --- |
+| NVL72 two-plane (Spectrum-6 or G300) | 800G | 128 | 113 racks / 8,136 GPUs | 114 racks |
+| NVL72 NCRA eight-plane | 200G | 512 | 1,792 racks (128 SUs) / 129,024 GPUs | 1,793 racks |
+| NVL8 1 or 2 × 400G | 400G | 256 | 4,096 servers (455 full racks) | 4,097 servers (456 racks) |
+| NVL8 NCRA 2 × 800G | 800G | 128 | 1,024 servers (113 full racks) | 1,025 servers (114 racks) |
+
+Past these limits the sizer flags `3-tier review`; it does not yet size a Rubin superspine tier.

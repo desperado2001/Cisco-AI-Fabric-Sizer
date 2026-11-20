@@ -27,7 +27,8 @@ test('rack packing enforces kilogram limits and cards display the same units',()
   assert.match(api.rackCardHtml(racks[0],48,60,100),/80\/100 kg/);
 });
 test('CSV exports kilogram columns and unchanged kilogram numeric values',()=>{
-  const source=html.slice(html.indexOf('function exportCsv(){'),html.indexOf('try{\n  const savedCustomer',html.indexOf('function exportCsv(){')));
+  const start=html.indexOf('function exportCsv(){');
+  const source=html.slice(start,start+html.slice(start).search(/try\{\r?\n  const savedCustomer/));
   let csv='';
   const window={LAST_PHYS_ROWS:[{name:'Server',qty:2,powerW:1000,totalPowerW:2000,weightKg:12.5,totalWeightKg:25,source:'Test'}],LAST_RACKS:[{id:1,role:'Compute',usedU:2,powerW:2000,weightKg:25,items:[]}]};
   const Blob=function(parts){csv=parts.join('');};

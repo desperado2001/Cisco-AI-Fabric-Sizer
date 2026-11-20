@@ -44,16 +44,17 @@ test('NCRA Vera Rubin places N9164F-NS6-ML on the 102.4T / 1.6T-cage geometry',(
   }
 });
 
-test('turning NCRA off restores the selected Rubin backend switch and 51.2T math',()=>{
+test('turning NCRA off restores the two-plane Spectrum-6 Rubin backend (102.4T)',()=>{
   const c=calculator();
   const base=c.run({platform:'rubin-nvl72',nodes:8,suMode:'off','req-ncpra':'off'}).design;
   const ncra=c.run({'req-ncpra':'guide'}).design;
   assert.equal(ncra.backend.switchPid,'N9164F-NS6-ML');
-  assert.equal(c.controls.get('backendSwitch').value,'N9164E-NS4-O');
+  assert.equal(c.controls.get('backendSwitch').value,'N9164F-NS6-ML');
   const back=c.run({'req-ncpra':'off'}).design;
-  assert.equal(back.backend.switchPid,'N9164E-NS4-O');
+  assert.equal(back.backend.switchPid,'N9164F-NS6-ML');
+  assert.equal(back.backend.planes,2);
   assert.deepEqual([back.backend.totalLeaves,back.backend.totalSpines],[base.backend.totalLeaves,base.backend.totalSpines]);
-  assert.deepEqual([back.backend.totalLeaves,back.backend.totalSpines],[40,20]);
+  assert.deepEqual([back.backend.totalLeaves,back.backend.totalSpines],[24,10]);
   assert.equal(c.controls.get('backendSwitch').disabled,false);
 });
 
@@ -63,16 +64,17 @@ test('NS6-ML liquid target is satisfied, not unmet, when NCRA places it for Rubi
   assert.equal(q.required,true);assert.equal(q.met,true);assert.equal(q.status,'REVIEW');assert.equal(q.appliedToSizing,true);
   assert.ok(!d.layoutAudit.checks.some(x=>x.domain==='Backend liquid cooling'));
   assert.ok(!c.api.runComplianceAudit().rows.some(r=>r.key==='backend-liquid-cooling'));
-  assert.match(c.controls.get('backendCoolingNote').innerHTML,/NCRA Vera Rubin backend: N9164F-NS6-ML placed/);
+  assert.match(c.controls.get('backendCoolingNote').innerHTML,/Vera Rubin Spectrum-6 backend: N9164F-NS6-ML placed/);
 });
 
 test('NCRA Rubin selection survives deal-profile save and restore',()=>{
   const store=new Map(),c=calculator({localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v)}});
   c.run({platform:'rubin-nvl72',nodes:8,suMode:'off','req-ncpra':'guide','req-customer':'Rubin NCRA','req-deal-id':'NCRA-1'});
   const key=c.api.saveCurrentRequirements();assert.ok(key);
-  c.run({'req-ncpra':'off'});assert.equal(c.window.DESIGN_STATE.backend.switchPid,'N9164E-NS4-O');
+  c.run({'req-ncpra':'off'});assert.equal(c.window.DESIGN_STATE.backend.planes,2);
   c.api.loadRequirementProfile(key);
   assert.equal(c.window.DESIGN_STATE.backend.switchPid,'N9164F-NS6-ML');
+  assert.equal(c.window.DESIGN_STATE.backend.planes,8);
 });
 
 test('Vera Rubin NVL72 applies the guide hardware profile and matches 1.6T/GPU scale-out',()=>{
@@ -199,7 +201,7 @@ test('calculator uses the octal-plane fabric for NCRA Rubin NVL72 and no supersp
   assert.match(c.controls.get('g300PlanningNote').innerHTML,/octal-plane design/);
   assert.equal(c.window.LAST_BACKEND_REGRESSION.pass,true);
   const off=calculator().run({platform:'rubin-nvl72',nodes:114,suMode:'off'}).design;
-  assert.equal(off.backend.planes,2);assert.equal(off.backend.switchPid,'N9164E-NS4-O');
+  assert.equal(off.backend.planes,2);assert.equal(off.backend.switchPid,'N9164F-NS6-ML');
 });
 
 const quad=new Function(html.slice(html.indexOf('function dist'),html.indexOf('function add(cat'))+

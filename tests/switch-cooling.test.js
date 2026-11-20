@@ -16,7 +16,7 @@ test('N9164 liquid reference separates the exact MGX model from its family and a
 });
 
 test('liquid target cannot reuse NS4 sizing as a qualified liquid BOM or silently change facilities',()=>{
-  for(const platform of ['gb300-nvl72','rubin-nvl72','b300','amd-mi355x']){
+  for(const platform of ['gb300-nvl72','b300','amd-mi355x']){
     const c=calculator(),base=c.run({platform,nodes:104,suMode:'off',backendCoolingOption:'modeled'}).design;
     const d=c.run({backendCoolingOption:'N9164F-NS6-ML'}).design;
     assert.equal(d.backend.coolingQualification.required,true);

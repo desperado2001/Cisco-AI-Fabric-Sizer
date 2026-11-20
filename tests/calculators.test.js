@@ -43,7 +43,7 @@ test('full calculator reconciles backend, frontend, storage, OOB, racks and faci
     reconcile(r,`${platform}/${nodes}/${storageSpines}`);cases++;
     assert.equal(c.window.LAST_BACKEND_REGRESSION.pass,true);
     if(r.design.frontend.enabled)assert.ok(r.design.frontend.leaves>0);
-    if(platform==='rubin-nvl72'&&nodes>=70)assert.equal(r.design.backend.portMapVerified,false);
+    if(platform==='rubin-nvl72')assert.equal(r.design.backend.portMapVerified,nodes<=113); // 102.4T two-plane ceiling: 113 racks
   }
   t.diagnostic(`${cases} complete profile/scale/storage combinations`);
 });

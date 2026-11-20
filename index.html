@@ -151,6 +151,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
         <option value="liquid-alc">DLC-2 / ALC — planning profile</option>
       </select></div>
       <div id="deploymentModelNote" class="footer-note" style="grid-column:1/-1"></div>
+      <div id="rubinPlanNotice" class="footer-note" role="note" style="display:none;grid-column:1/-1;border:1px solid #b45309;background:rgba(180,83,9,.12);border-radius:8px;padding:8px 10px"></div>
       <div id="gb300RaPolicyWrap" style="display:none"><label for="gb300RaPolicy">GB300 reference architecture requirement</label><select id="gb300RaPolicy" onchange="calc()">
         <option value="engineering" selected>Engineering sizing / configurable topology</option>
         <option value="cisco-cloud-ra">Cisco Cloud RA required</option>
@@ -261,6 +262,7 @@ button{background:#0ea5e9;color:white;border:0;border-radius:8px;padding:8px 12p
       <div><label>Backend switch</label><select id="backendSwitch" onchange="calc()">
         <option value="N9164E-NS4-O" selected>N9164E-NS4-O — air cooled · 64×800G</option>
         <option value="N9364E-SG2X-O">N9364E-SG2X-O</option>
+        <option value="N9164F-NS6-ML">N9164F-NS6-ML — Spectrum-6 · 64×1.6T · liquid · Rubin default</option>
         <option value="N9364F-SG3-A">N9364F-SG3-A — G300 · 64×1.6T · air · Rubin planning</option>
       </select></div>
       <div><label for="backendCoolingOption">Liquid-cooled N9164 requirement</label><select id="backendCoolingOption" onchange="calc()">
@@ -1052,15 +1054,25 @@ function syncPlatform(){
   if($('supermicroPidWrap'))$('supermicroPidWrap').style.display=p==='supermicro-b300'?'':'none';
   if(p==='supermicro-b300')syncSupermicroPidOptions();
   const fullRack=['gb300-nvl72','rubin-nvl72','rubin-nvl8-rack'].includes(p);
-  if(!['rubin-nvl72','rubin-hgx','rubin-nvl8-rack'].includes(p)&&$('backendSwitch')?.value==='N9364F-SG3-A')$('backendSwitch').value='N9164E-NS4-O';
-  const g300Option=Array.from($('backendSwitch')?.options||[]).find(o=>o.value==='N9364F-SG3-A');
-  if(g300Option)g300Option.disabled=!['rubin-nvl72','rubin-hgx','rubin-nvl8-rack'].includes(p);
+  // Vera Rubin requires 102.4T backend switching (Spectrum-6 default, G300 optional);
+  // other platforms keep the 51.2T switches.
+  const rubinSel=isRubinPlatform(p),bs=$('backendSwitch');
+  if(bs){
+    Array.from(bs.options||[]).forEach(o=>{o.disabled=RUBIN_BACKEND_SWITCHES.includes(o.value)?!rubinSel:rubinSel;});
+    if(rubinSel&&!RUBIN_BACKEND_SWITCHES.includes(bs.value))bs.value=NCRA_RUBIN_SWITCH;
+    if(!rubinSel&&RUBIN_BACKEND_SWITCHES.includes(bs.value))bs.value='N9164E-NS4-O';
+  }
   if($('nodes').labels?.[0])$('nodes').labels[0].textContent=fullRack?'Complete racks':'Individual servers';
   if($('nodesUnit'))$('nodesUnit').textContent=fullRack?'racks':'servers';
   if($('deploymentModelNote'))$('deploymentModelNote').textContent=p==='rubin-nvl8-rack'
     ? 'Full-rack NVL8: 1 quantity = 1 complete rack with 9 individual 8-GPU servers (72 GPUs total). This is a rack of NVL8 servers, not an NVL72 system. Power and weight inputs below remain per server.'
     :p==='rubin-hgx'?'Modular NVL8: 1 quantity = 1 individual server with 8 GPUs. Rack placement is calculated from server size, power and kg weight limits.'
     :fullRack?'Full-rack system: 1 quantity = 1 dedicated 72-GPU rack.':'Modular server: quantity counts individual servers; rack placement is calculated separately.';
+  if($('rubinPlanNotice')){
+    const rubinPlan=isRubinPlatform(p);
+    $('rubinPlanNotice').style.display=rubinPlan?'':'none';
+    $('rubinPlanNotice').innerHTML=rubinPlan?`<b class="warn">${RUBIN_PLAN_NOTICE.label}</b> ${RUBIN_PLAN_NOTICE.text}`:'';
+  }
   if(fullRack&&$('suMode').value==='cvd4'){$('suMode').value='custom';$('suNodes').value='1';}
   syncRackScalePidOptions(p);
   syncRubinProfile();
@@ -1203,7 +1215,7 @@ function switchCoolingPlan(option,modeledPid){
     return {required,met:required,status:required?'REVIEW':'NOT REQUESTED',modeledPid,targetPid:required?modeledPid:null,familyPid:'N9164F-NS6',
       referencePid:modeledPid,cooling:'Direct liquid cooling',rackArchitecture:'NVIDIA MGX',familyBandwidthTbps:102.4,familyPortSpeedG:1600,appliedToSizing:true,
       orderabilityVerified:false,powerW:null,weightKg:null,coolantFlowLpm:null,source:HIGH_RADIX_SWITCHES[modeledPid].source,
-      message:`${modeledPid} (Spectrum-6, 102.4T, 64×1.6T, liquid cooled) is the modeled backend switch under the NCRA Vera Rubin profile. Quantities use the 102.4T whole-link model; exact CCW configuration, optics, MGX mounting/power, coolant conditions, power and installed weight require Cisco qualification.`};
+      message:`${modeledPid} (Spectrum-6, 102.4T, 64×1.6T, liquid cooled) is the modeled Vera Rubin backend switch (102.4T required). Quantities use the 102.4T whole-link model; exact CCW configuration, optics, MGX mounting/power, coolant conditions, power and installed weight require Cisco qualification.`};
   }
   if(option==='N9364F-SG3-RL')return {required:true,status:'FAIL',modeledPid,targetPid:option,familyPid:'N9364F-SG3',referencePid:option,
     cooling:'Direct liquid cooling',rackArchitecture:'ORv3',familyBandwidthTbps:102.4,familyPortSpeedG:1600,appliedToSizing:false,
@@ -1224,7 +1236,7 @@ function switchCoolingPlan(option,modeledPid){
       :'Liquid-cooled reference: N9164F-NS6-ML (NVIDIA MGX); family designation N9164F-NS6. N9164E-NS4-O is the air-cooled Spectrum-4 model. The liquid model requires a separate qualified sizing and cooling profile.'};
 }
 function switchCoolingReferenceHtml(plan){
-  if(plan.appliedToSizing&&plan.modeledPid===NCRA_RUBIN_SWITCH)return `<b class="warn">NCRA Vera Rubin backend: ${plan.modeledPid} placed${plan.met?' — liquid-cooled requirement applied, qualification pending':''}</b><br>${plan.message}<br><a href="${plan.source}" target="_blank" rel="noopener">Cisco liquid-cooled MGX model</a>`;
+  if(plan.appliedToSizing&&plan.modeledPid===NCRA_RUBIN_SWITCH)return `<b class="warn">Vera Rubin Spectrum-6 backend: ${plan.modeledPid} placed${plan.met?' — liquid-cooled requirement applied, qualification pending':''}</b><br>${plan.message}<br><a href="${plan.source}" target="_blank" rel="noopener">Cisco liquid-cooled MGX model</a>`;
   if(plan.targetPid==='N9364F-SG3-RL')return `<b class="bad">G300 LIQUID-COOLED REQUIREMENT UNMET</b><br>${plan.message}<br><a href="${plan.source}" target="_blank" rel="noopener">Cisco N9364F-SG3-RL liquid ORv3 reference</a>`;
   if(!plan.required&&plan.modeledPid==='N9364F-SG3-A')return '<b>G300 air-cooled planning:</b> N9364F-SG3-A, 3RU. For a liquid-cooled ORv3 requirement select N9364F-SG3-RL above; its exact physical and coolant configuration still requires qualification. Power and installed weight are TBD.';
   return `<b class="${plan.required?'bad':'warn'}">${plan.required?'LIQUID-COOLED BACKEND REQUIREMENT UNMET':'N9164 liquid-cooled part-number reference'}</b><br>${plan.message}<br>
@@ -1288,6 +1300,17 @@ const HIGH_RADIX_SWITCHES={
     source:'https://blogs.cisco.com/datacenter/powering-ai-ready-data-centers-with-n9000-support-for-orv3'}
 };
 const NCRA_RUBIN_SWITCH='N9164F-NS6-ML';
+// Vera Rubin network sizing is an initial plan. Platform hardware, NICs, switch
+// qualification, optics and physical data are still being finalized, so every
+// Rubin output carries this notice.
+const RUBIN_PLATFORMS=['rubin-nvl72','rubin-hgx','rubin-nvl8-rack'];
+const RUBIN_PLAN_NOTICE={
+  label:'INITIAL PLAN - SUBJECT TO CHANGE',
+  text:'Vera Rubin network sizing is an initial planning baseline. Platform specifications, ConnectX-9 NIC configuration, backend switch qualification (Spectrum-6 / G300), optics, cabling, power and weight are not final and may change. Do not use these results as a committed design or final BOM without revalidation.'
+};
+function isRubinPlatform(p){return RUBIN_PLATFORMS.includes(p)}
+const RUBIN_BACKEND_SWITCHES=[NCRA_RUBIN_SWITCH,'N9364F-SG3-A'];
+function rubinPlanStatus(p){return isRubinPlatform(p)?{initialPlan:true,label:RUBIN_PLAN_NOTICE.label,notice:RUBIN_PLAN_NOTICE.text}:{initialPlan:false}}
 function rubinG300BackendDesign(seed,switchPid='N9364F-SG3-A'){
   const hs=HIGH_RADIX_SWITCHES[switchPid];
   const cageSpeedG=1600,switchCapacityGbps=102400,rails=seed.railCount||8;
@@ -2804,6 +2827,7 @@ function projectPhaseCcwData(phases,index,mode='cumulative'){
   }
   return {bom,term:d.ordering?.vastTerm||36,computeAto:compute.pid,computeNodes:compute.quantity,
     mgmtChild:mgmt.pid,mgmtNodes:mgmt.quantity,suDesc:d.ordering?.suDesc||'Captured phase',sparePct:0,
+    planStatus:d.planStatus||{initialPlan:false},
     filename:sanitizeFilenamePart(d.customer||'Customer')+'_Phase_'+(index+1)+'_'+sanitizeFilenamePart(phase.name)+'_CCW_Additions.xlsx'};
 }
 function exportProjectPhaseCcw(index){
@@ -2911,8 +2935,13 @@ function calc(){
   const gpuModel=isCustom?($('customGpuModel').value.trim()||'Custom GPU'):
     (isB300?'NVIDIA B300':isAmdMi355x?'AMD Instinct MI355X':platform==='gb300-nvl72'?'NVIDIA GB300':platform==='rubin-nvl72'||(platform==='rubin-hgx'||platform==='rubin-nvl8-rack')?'NVIDIA Vera Rubin':platform==='h200'?'NVIDIA H200':'GPU');
   if(platform==='gb300-nvl72'||platform==='rubin-nvl72'){ $('backendTopology').value='rail'; $('backendTopology').disabled=true; }
-  const mode=isB300?$('b300mode').value:((isCustom||isRubinNvl8||isAmdMi355x)?'custom':'single800'),top=$('backendTopology').value,pid=ncraRubin?NCRA_RUBIN_SWITCH:ncraQuad?'N9164E-NS4-O':$('backendSwitch').value;
-  const g300Selected=pid==='N9364F-SG3-A',highRadix=HIGH_RADIX_SWITCHES[pid]||null;
+  const mode=isB300?$('b300mode').value:((isCustom||isRubinNvl8||isAmdMi355x)?'custom':'single800'),top=$('backendTopology').value;
+  let selectedSwitch=$('backendSwitch').value;
+  // Vera Rubin requires 102.4T switching; a 51.2T selection (for example from an older saved profile) moves to Spectrum-6.
+  if(isRubinPlatform(platform)&&!RUBIN_BACKEND_SWITCHES.includes(selectedSwitch)){selectedSwitch=NCRA_RUBIN_SWITCH;$('backendSwitch').value=selectedSwitch;}
+  const pid=ncraRubin?NCRA_RUBIN_SWITCH:ncraQuad?'N9164E-NS4-O':selectedSwitch;
+  const g300Selected=pid==='N9364F-SG3-A',highRadix=HIGH_RADIX_SWITCHES[pid]||null,spectrum6=pid===NCRA_RUBIN_SWITCH;
+  if(spectrum6&&!isRubinPlatform(platform))throw Error('Spectrum-6 N9164F-NS6-ML planning is available only for Vera Rubin profiles.');
   if(g300Selected&&!['rubin-nvl72','rubin-hgx','rubin-nvl8-rack'].includes(platform))throw Error('G300 planning is available only for Vera Rubin profiles.');
   const backendCooling=switchCoolingPlan($('backendCoolingOption')?.value||'modeled',pid);
   if($('backendCoolingNote'))$('backendCoolingNote').innerHTML=switchCoolingReferenceHtml(backendCooling);
@@ -3015,7 +3044,7 @@ function calc(){
   }else be=makeBackend(nodes);
   if($('g300PlanningNote')){
     $('g300PlanningNote').style.display=highRadix?'block':'none';
-    $('g300PlanningNote').innerHTML=ncraRubin?`<b class="warn">NCRA Vera Rubin backend — ${pid}</b><br>NVIDIA Spectrum-6 · 102.4 Tb/s · 64×1.6T OSFP · liquid cooled (NVIDIA MGX). The NCRA requirements option replaces the 51.2T backend for Vera Rubin: ${be.octalPlane?`octal-plane design — 8 planes × one 200G lane/GPU (1.6T/GPU), 4 rails, ${be.scalableUnits} × ${be.suRacks}-rack SU${be.scalableUnits===1?'':'s'}, spines provisioned for a ${be.spineBandSu}-SU band; two-tier through ${be.maxScalableUnits} SUs (${be.twoTierGpuCeiling.toLocaleString()} GPUs). Tray-to-leaf lane shuffle required${be.leafSpineShuffle?'; leaf-to-spine shuffle required above 32 SUs':''}.`:`${be.planes} planes × 2×800G CX9 links/GPU (1.6T/GPU) with ${1600/be.speed} logical 800G branches per 1.6T cage.`} ${be.totalLeaves} leaves + ${be.totalSpines} spines across ${be.planes} plane(s). ${be.portMapVerified?'Whole-link/cage arithmetic fits the assumed two-tier map.':'Two-tier map does not fit; switch counts are estimates and a qualified third tier is required.'} Exact rail/plane mapping, switch/host optics, cabling, software and orderability require Cisco/NVIDIA validation. <b class="bad">Switch electrical power, installed weight and coolant data are TBD; facility totals are incomplete.</b> <a href="${be.source}" target="_blank" rel="noopener">Cisco liquid-cooled MGX model</a>`:g300Selected?`<b class="warn">G300 / Rubin engineering planning</b><br>N9364F-SG3-A · Silicon One G300 · 102.4 Tb/s · 64×1.6T OSFP · 3RU air cooled. This profile models ${be.speed}G host links with ${1600/be.speed} logical branches per 1.6T cage. ${be.totalLeaves} leaves + ${be.totalSpines} spines across ${be.planes} plane(s). ${be.portMapVerified?'Whole-link/cage arithmetic fits the assumed two-tier map.':'Two-tier map does not fit; switch counts are estimates and a qualified third tier is required.'} Exact Rubin rail/plane mapping, switch/host optics, cabling, software and orderability require Cisco/OEM validation. <b class="bad">Switch electrical power and installed weight are TBD; facility totals are incomplete.</b> <a href="${be.source}" target="_blank" rel="noopener">Cisco G300 platform reference</a>`:'';
+    $('g300PlanningNote').innerHTML=spectrum6?`<b class="warn">${ncraRubin?'NCRA ':''}Vera Rubin backend — ${pid}</b><br>NVIDIA Spectrum-6 · 102.4 Tb/s · 64×1.6T OSFP · liquid cooled (NVIDIA MGX). ${ncraRubin?'The NCRA requirements option places the Spectrum-6 backend for Vera Rubin':'Vera Rubin requires 102.4T backend switching; Spectrum-6 is the default'}:${be.octalPlane?`octal-plane design — 8 planes × one 200G lane/GPU (1.6T/GPU), 4 rails, ${be.scalableUnits} × ${be.suRacks}-rack SU${be.scalableUnits===1?'':'s'}, spines provisioned for a ${be.spineBandSu}-SU band; two-tier through ${be.maxScalableUnits} SUs (${be.twoTierGpuCeiling.toLocaleString()} GPUs). Tray-to-leaf lane shuffle required${be.leafSpineShuffle?'; leaf-to-spine shuffle required above 32 SUs':''}.`:`${be.planes} planes × 2×800G CX9 links/GPU (1.6T/GPU) with ${1600/be.speed} logical 800G branches per 1.6T cage.`} ${be.totalLeaves} leaves + ${be.totalSpines} spines across ${be.planes} plane(s). ${be.portMapVerified?'Whole-link/cage arithmetic fits the assumed two-tier map.':'Two-tier map does not fit; switch counts are estimates and a qualified third tier is required.'} Exact rail/plane mapping, switch/host optics, cabling, software and orderability require Cisco/NVIDIA validation. <b class="bad">Switch electrical power, installed weight and coolant data are TBD; facility totals are incomplete.</b> <a href="${be.source}" target="_blank" rel="noopener">Cisco liquid-cooled MGX model</a>`:g300Selected?`<b class="warn">G300 / Rubin engineering planning</b><br>N9364F-SG3-A · Silicon One G300 · 102.4 Tb/s · 64×1.6T OSFP · 3RU air cooled. This profile models ${be.speed}G host links with ${1600/be.speed} logical branches per 1.6T cage. ${be.totalLeaves} leaves + ${be.totalSpines} spines across ${be.planes} plane(s). ${be.portMapVerified?'Whole-link/cage arithmetic fits the assumed two-tier map.':'Two-tier map does not fit; switch counts are estimates and a qualified third tier is required.'} Exact Rubin rail/plane mapping, switch/host optics, cabling, software and orderability require Cisco/OEM validation. <b class="bad">Switch electrical power and installed weight are TBD; facility totals are incomplete.</b> <a href="${be.source}" target="_blank" rel="noopener">Cisco G300 platform reference</a>`:'';
   }
   if(platform==='gb300-nvl72'&&be.gb300CompactTwoTier)window.CURRENT_SU_DESC=`${nodes} deployed GB300 racks · engineered two-tier fabric · ${be.fabricRacks}-rack modeled capacity per fabric; growth requires recalculation`;
   const backendScalability=platform==='gb300-nvl72'?gb300Scalability(be):null;
@@ -3450,7 +3479,7 @@ function calc(){
       basis:`${be.physicalHostLinks} logical host links and ${be.logicalLeafSpineLinks} logical fabric links; this is one unresolved design lot, not one cable`,status:'Not an orderable cable BOM; exact assemblies and quantities require qualification'});
     BOM.filter(row=>/^AI Backend/.test(row.cat)).forEach(row=>{
       if(['AI Backend Leaf','AI Backend Spine'].includes(row.cat))row.status=`${hs} 102.4T whole-link planning`;
-      row.status=(row.status||'')+(ncraRubin?' | NCRA Vera Rubin 102.4T backend; physical data and qualification pending':' | G300 / Rubin engineering planning; physical data and qualification pending');
+      row.status=(row.status||'')+(spectrum6?` | ${ncraRubin?'NCRA ':''}Vera Rubin Spectrum-6 102.4T backend; physical data and qualification pending`:' | G300 / Rubin engineering planning; physical data and qualification pending');
     });
   }
 
@@ -3621,8 +3650,9 @@ function calc(){
   $('bomBody').innerHTML=BOM.map(x=>`<tr><td>${x.cat}</td><td class="mono">${x.pid}</td><td>${x.desc}</td><td>${x.required??x.qty}</td><td>${x.spare??0}</td><td><b>${x.total??x.qty}</b></td><td>${x.basis}</td><td><span class="tag">${x.status}</span></td></tr>`).join('');
 
   const q=[];
+  if(isRubinPlatform(platform))q.push(`<b class="warn">${RUBIN_PLAN_NOTICE.label}</b> ${RUBIN_PLAN_NOTICE.text}`);
   if(ncraQuad&&platform!=='gb300-nvl72')q.push(`<b class="warn">NCRA QUAD-PLANE</b> B300 E-W: ${nodes} node${nodes===1?'':'s'} → ${be.scalableUnits} × 64-node SU${be.scalableUnits===1?'':'s'}; ${be.totalLeaves} leaves + ${be.totalSpines} spines${be.totalSuperspines?` + ${be.totalSuperspines} superspines`:''}, 4 planes × 200G/GPU on N9164E-NS4-O. The B300 mode selector is overridden while NCRA is selected. Tray-to-leaf lane shuffle required.`);
-  if(ncraRubin)q.push(`<b class="warn">NCRA SPECTRUM-6 REVIEW</b> NCRA requirements option places ${pid} (102.4T / 64×1.6T, liquid cooled) for Vera Rubin instead of the 51.2T backend, at 2×800G CX9 links/GPU across two planes. Exact rail/plane mapping, optics, cabling, MGX mounting, software and orderability remain unverified. Switch power, installed weight and coolant data are TBD; facility totals exclude those unknown loads.`);
+  if(spectrum6)q.push(`<b class="warn">${ncraRubin?'NCRA ':''}SPECTRUM-6 REVIEW</b> ${ncraRubin?'NCRA requirements option places':'Vera Rubin requires 102.4T backend switching; the sizer places'} ${pid} (102.4T / 64×1.6T, liquid cooled), at ${be.planes} plane${be.planes===1?'':'s'} × ${be.speed}G links. Exact rail/plane mapping, optics, cabling, MGX mounting, software and orderability remain unverified. Switch power, installed weight and coolant data are TBD; facility totals exclude those unknown loads.`);
   if(g300Selected)q.push('<b class="warn">G300 REVIEW</b> N9364F-SG3-A uses the 102.4T / 64×1.6T cage model and existing Rubin NIC assumptions. Exact OEM rail/plane mapping, optics, cabling, software and orderability remain unverified. Switch power and installed weight are TBD; facility totals exclude those unknown loads. This is not a validated Rubin Cloud RA.');
   if(backendCooling.required&&!backendCooling.met)q.push('<b class="bad">LIQUID COOLING FAIL</b> '+backendCooling.message);
   if(backendScalability)q.push(`<b class="${backendScalability.status==='EXCEEDED'?'bad':'warn'}">SCALABILITY ${backendScalability.status}</b> Per fabric: installed inventory budget ${backendScalability.installedCapacityRacksPerFabric??'unverified'} racks; ${backendScalability.installedHeadroomRacksPerFabric??'unverified'} spare rack slots; selected topology/model ceiling ${backendScalability.topologyLimitRacksPerFabric} racks. Cisco Cloud RA two-tier boundary: 64 racks. ${backendScalability.growth} ${backendScalability.qualification}`);
@@ -3814,10 +3844,10 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
   }
 
   const layoutAudit=auditFabricLayout({be,fe:frontendEnabled?fe:null,vn:vastEnabled?vn:null,gbMgmt:platform==='gb300-nvl72'&&mgmtEnabled?gb300MgmtFabric:null,gbOob:platform==='gb300-nvl72'&&oobEnabled?gb300Oob:null,isGb:platform==='gb300-nvl72',frontendOver:feOver,dedicated,oob:oobEnabled?{capacityExceeded:oobSpineCapacityExceeded}:null});
-  if(ncraRubin){
+  if(spectrum6){
     layoutAudit.checks.push({domain:'Spectrum-6 physical and optical qualification',status:'REVIEW',message:`${pid} 102.4T whole-link geometry is planning only. Exact Spectrum-6/CX9 optics/cables, MGX liquid-cooling integration, Cisco/NVIDIA qualification, electrical power and installed weight remain TBD.`});
     if(layoutAudit.status!=='FAIL')layoutAudit.status='REVIEW';
-    $('summary').innerHTML=`<b class="warn">NCRA Vera Rubin backend: ${pid} Spectrum-6 102.4T — qualification pending</b><br><b class="bad">Facility power and weight totals are incomplete: Spectrum-6 switch electrical power and installed weight are TBD.</b><br>`+$('summary').innerHTML;
+    $('summary').innerHTML=`<b class="warn">${ncraRubin?'NCRA ':''}Vera Rubin backend: ${pid} Spectrum-6 102.4T — qualification pending</b><br><b class="bad">Facility power and weight totals are incomplete: Spectrum-6 switch electrical power and installed weight are TBD.</b><br>`+$('summary').innerHTML;
     $('facilityMetrics').innerHTML='<b class="bad">INCOMPLETE — Spectrum-6 switch electrical power and installed weight are TBD and excluded from totals.</b><br>'+$('facilityMetrics').innerHTML;
     $('facilitySummary').innerHTML='<b class="bad">INCOMPLETE — Spectrum-6 switch electrical power and installed weight are TBD.</b><br>'+$('facilitySummary').innerHTML;
   }else if(g300Selected){
@@ -3862,6 +3892,7 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
   $('bomBody').innerHTML=BOM.map(x=>`<tr><td>${x.cat}</td><td class="mono">${x.pid}</td><td>${x.desc}</td><td>${x.required??x.qty}</td><td>${x.spare??0}</td><td><b>${x.total??x.qty}</b></td><td>${x.basis}</td><td><span class="tag">${x.status}</span></td></tr>`).join('');
   window.DESIGN_STATE={
     layoutAudit,
+    planStatus:rubinPlanStatus(platform),
     referenceArchitecture:{policy:cloudRaRequired?'cisco-cloud-ra':'engineering',audit:cloudRaAudit,plannedRacks:cloudRaRequired?be.requestedCapacity:null},
     customer: String($('customerName')?.value||'').trim() || 'Customer',
     ordering:{vastTerm, suDesc:window.CURRENT_SU_DESC||'',computeAto:window.CURRENT_COMPUTE_ATO||'',mgmtChild:window.CURRENT_MGMT_CHILD||''},
@@ -3944,6 +3975,7 @@ q.push(`<b class="good">PASS</b> Spare calculation uses CEILING(required × ${sp
     backend:{
       g300Planning:g300Selected,
       ncraSwitchOverride:ncraRubin,
+      spectrum6Backend:spectrum6,
       switchAsic:highRadix?highRadix.asic:null,
       switchCapacityTbps:highRadix?102.4:51.2,
       cageSpeedG:be.cageSpeedG||800,
@@ -4570,8 +4602,9 @@ function pptAddHeader(slide,title,subtitle=''){
 function pptAddFooter(slide,d){
   const ra=d.referenceArchitecture?.policy==='cisco-cloud-ra'?`  |  Cisco Cloud RA ${d.referenceArchitecture.audit?.status||'REVIEW'}`:'';
   const liquid=d.backend?.coolingQualification?.required&&!d.backend.coolingQualification.met?'  |  Liquid-cooled backend UNMET':'';
-  const g300=d.backend?.g300Planning?'  |  G300 planning / physical data TBD':d.backend?.ncraSwitchOverride?'  |  NCRA Spectrum-6 backend / physical data TBD':'';
-  slide.addText(`${d.customer}  |  Cisco Secure AI Factory Sizer${ra}${liquid}${g300}  |  ${d.generatedAt}`,{x:.55,y:7.12,w:8.9,h:.18,fontFace:'Aptos',fontSize:7.5,color:'68839D',margin:0,align:'right'});
+  const g300=d.backend?.g300Planning?'  |  G300 planning / physical data TBD':d.backend?.spectrum6Backend||d.backend?.ncraSwitchOverride?'  |  Spectrum-6 backend / physical data TBD':'';
+  const plan=d.planStatus?.initialPlan?'  |  Initial plan - subject to change':'';
+  slide.addText(`${d.customer}  |  Cisco Secure AI Factory Sizer${plan}${ra}${liquid}${g300}  |  ${d.generatedAt}`,{x:.55,y:7.12,w:8.9,h:.18,fontFace:'Aptos',fontSize:7.5,color:'68839D',margin:0,align:'right'});
 }
 function pptCard(slide,x,y,w,h,title,value,sub=''){
   slide.addShape(PPTX_SHAPE.roundRect,{x,y,w,h,fill:{color:'10253A'},line:{color:'244763',width:1}});
@@ -4765,6 +4798,11 @@ async function exportDesignPptx(){
       s.addText(d.customer,{x:.75,y:2.84,w:6.4,h:.38,fontFace:'Aptos',fontSize:18,color:'D6E5F2',margin:0});
       s.addText(`${d.solution.totalGpus.toLocaleString()} GPUs  •  ${d.solution.rackCount} racks  •  ${pptShortNumber(d.solution.totalPowerKw,1)} kW modeled facility load`,
         {x:.75,y:3.45,w:7,h:.3,fontFace:'Aptos',fontSize:12,color:'91A9BE',margin:0});
+      if(d.planStatus?.initialPlan){
+        s.addShape(PPTX_SHAPE.roundRect,{x:.75,y:4.1,w:6.6,h:1.15,fill:{color:'3A2408'},line:{color:'F59E0B',width:1}});
+        s.addText(d.planStatus.label,{x:.92,y:4.2,w:6.3,h:.25,fontFace:'Aptos',fontSize:11,bold:true,color:'FBBF24',margin:0});
+        s.addText(d.planStatus.notice,{x:.92,y:4.48,w:6.3,h:.7,fontFace:'Aptos',fontSize:9,color:'F4E3C3',margin:0,valign:'top',fit:'shrink'});
+      }
       s.addText(`Generated ${d.generatedAt}`,{x:.75,y:6.65,w:3.5,h:.25,fontFace:'Aptos',fontSize:9,color:'6E8CA6',margin:0});
       s.addText('Design generated from the active sizing scenario',{x:5.1,y:6.65,w:4.1,h:.25,fontFace:'Aptos',fontSize:8.5,color:'6E8CA6',margin:0,align:'right'});
     };
@@ -5038,7 +5076,8 @@ async function exportDesignPptx(){
     const addValidation=()=>{
       const s=pptx.addSlide(); pptAddHeader(s,'Validation & Design Notes','Items that remain subject to final engineering, HCL/TMG and configurator validation.');
       const raNotes=(d.referenceArchitecture?.audit?.checks||[]).filter(c=>c.status!=='PASS').map(c=>c.status+' '+c.domain+': '+c.message);
-      const important=[...raNotes,...(d.qa||[]).filter(x=>/CHECK|FAIL|REVIEW|BOUNDARY|CCW ACTION|CUSTOM/i.test(x)&&!x.includes('Cisco Cloud RA /'))].slice(0,14);
+      const planNote=d.planStatus?.initialPlan?[d.planStatus.label+': '+d.planStatus.notice]:[];
+      const important=[...planNote,...raNotes,...(d.qa||[]).filter(x=>!x.includes(RUBIN_PLAN_NOTICE.label)).filter(x=>/CHECK|FAIL|REVIEW|BOUNDARY|CCW ACTION|CUSTOM/i.test(x)&&!x.includes('Cisco Cloud RA /'))].slice(0,14);
       const items=important.length?important:['No current review items were identified by the active validation rules.'];
       pptBulletBlock(s,.65,1.45,8.7,5.55,'Engineering notes',items);
       pptAddFooter(s,d);
@@ -5109,11 +5148,12 @@ function exportCcwXlsx(captured=null){
   try{
     const headers=['Part Number','Quantity','Duration (Mnths)','Initial Term(Months)','Auto Renew Term(Months)','Billing Model','Requested Start Date','List Price','Discount %','Notes'];
     const term=captured?captured.term:(+$('vastTerm').value||36);
-    const context=captured||{computeAto:window.CURRENT_COMPUTE_ATO,computeNodes:window.CURRENT_COMPUTE_NODES,mgmtChild:window.CURRENT_MGMT_CHILD,mgmtNodes:window.CURRENT_MGMT_NODES,suDesc:window.CURRENT_SU_DESC,sparePct:window.CURRENT_SPARE_PCT};
+    const context=captured||{computeAto:window.CURRENT_COMPUTE_ATO,computeNodes:window.CURRENT_COMPUTE_NODES,mgmtChild:window.CURRENT_MGMT_CHILD,mgmtNodes:window.CURRENT_MGMT_NODES,suDesc:window.CURRENT_SU_DESC,sparePct:window.CURRENT_SPARE_PCT,planStatus:window.DESIGN_STATE?.planStatus};
+    const planNote=context.planStatus?.initialPlan?`${context.planStatus.label}: Vera Rubin initial plan; revalidate before ordering`:'';
     const rows=(captured?captured.bom:BOM).filter(x=>x.pid&&x.pid!=='SU-PLANNING'&&x.cat!=='Compute ATO (Configurator Selection)'&&x.cat!=='Management ATO (Configurator Selection)'&&(x.total??x.qty??0)>0).map(x=>{
       const req=x.required??x.qty??0,sp=x.spare??0,total=x.total??req,pid=String(x.pid);
       const isTermed=pid.startsWith('VAST-SW-')||pid.startsWith('VAST-PS-')||pid==='VAST-PS';
-      const note=[x.desc,x.basis,
+      const note=[planNote,x.desc,x.basis,
         (x.cat==='Compute MLB'&&context.computeAto?`Configurator child: ${context.computeAto} × ${context.computeNodes||0}; power cable selection required`:''),
       (x.cat==='Management MLB'&&context.mgmtChild?`Configurator child: ${context.mgmtChild} × ${context.mgmtNodes||0}; configure CPU, memory, mirrored storage, VIC and power supplies under the MLB`:''),
         (x.pid==='VAST-DATA-MLB'?'CCW hierarchy parent: hardware children + VAST-DATA-SPLUS':''),
@@ -5264,7 +5304,9 @@ function exportCcwXlsx(captured=null){
 
 function exportCsv(){
   const e=v=>`"${String(v).replaceAll('"','""')}"`;
-  let s='Line,Category,PID,Required,Spare,TotalWithSpare,Description,Basis,Validation\n';
+  const plan=window.DESIGN_STATE?.planStatus;
+  let s=plan?.initialPlan?`Plan Status,${e(plan.label)},${e(plan.notice)}\n\n`:'';
+  s+='Line,Category,PID,Required,Spare,TotalWithSpare,Description,Basis,Validation\n';
   BOM.forEach((x,i)=>{s+=`${i+1},${e(x.cat)},${e(x.pid)},${x.required??x.qty},${x.spare??0},${x.total??x.qty},${e(x.desc)},${e(x.basis)},${e(x.status)}\n`});
   s+='\nFacilities Summary\nComponent,Qty,PowerPerUnit_kW,TotalPower_kW,WeightPerUnit_kg,TotalWeight_kg,Source\n';
   (window.LAST_PHYS_ROWS||[]).forEach(r=>{s+=`${e(r.name)},${r.qty},${r.powerKnown===false?'TBD':(r.powerW/1000).toFixed(3)},${r.powerKnown===false?'TBD':(r.totalPowerW/1000).toFixed(3)},${r.weightKnown===false?'TBD':r.weightKg.toFixed(2)},${r.weightKnown===false?'TBD':r.totalWeightKg.toFixed(2)},${e(r.source)}\n`});
